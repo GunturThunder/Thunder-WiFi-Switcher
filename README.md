@@ -14,8 +14,8 @@
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey.svg" alt="macOS and Windows">
 </p>
 
-> [!WARNING]
-> **Work in progress, not usable yet.** The repo is being set up (Phase 0 of the [roadmap](docs/ROADMAP.md)). The first build to try is **v0.1 Mac alpha**, which will switch on signal strength only.
+> [!NOTE]
+> **Early days.** Versions before 1.0 are alpha and beta builds for testers: expect rough edges, and please tell us about them with a [network report](https://github.com/GunturThunder/Thunder-WiFi-Switcher/issues/new?template=network-report.yml).
 
 ## Why
 
@@ -23,9 +23,9 @@ Laptops stay on the Wi-Fi network they joined, even after it turns weak or overl
 
 Signal strength alone isn't enough either: a network can show full bars and still have high ping, or no internet at all, when everyone is on it.
 
-## What it will do
+## What it does
 
-Planned for v1.0 (full list in the [PRD](docs/PRD.md)):
+(The full plan for v1.0 is in the [PRD](docs/PRD.md).)
 
 - **Switch on weak signal:** move to a clearly stronger saved network when the signal stays weak.
 - **Switch on bad internet:** move when ping or packet loss stays bad, even with a strong signal.
@@ -70,6 +70,20 @@ The router is pinged separately, so it can tell a weak Wi-Fi link from a dead in
 ## Privacy
 
 Both macOS and Windows hide Wi-Fi network names from apps that don't have Location permission, so the app asks for it. It never reads, stores or sends your location. The only traffic it creates is a tiny ping to your router, 1.1.1.1 and 8.8.8.8, plus an update check to GitHub. No analytics, no telemetry. Details in [PRIVACY.md](PRIVACY.md).
+
+## Install
+
+Download the latest installer from [Releases](https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases):
+
+- **macOS 14 or later** (Apple Silicon and Intel): the `.dmg`. Open it and drag Thunder WiFi Switcher to Applications.
+- **Windows 10 22H2 or Windows 11:** the `x64` `.msi`, or the `arm64` one on ARM laptops.
+
+The builds aren't signed yet (planned before v1.0), so the first launch needs one extra step:
+
+- **macOS:** open the app once. When macOS says it can't check it, go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run this in Terminal: `xattr -dr com.apple.quarantine "/Applications/Thunder WiFi Switcher.app"`.
+- **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
+
+When the app first starts, allow Location access (macOS), or turn on **Let desktop apps access your location** (Windows 11 24H2 and later). Both systems hide Wi-Fi network names from apps without it; [PRIVACY.md](PRIVACY.md) explains why that's safe.
 
 ## Build from source
 

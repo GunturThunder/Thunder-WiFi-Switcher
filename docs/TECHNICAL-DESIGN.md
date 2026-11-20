@@ -268,14 +268,15 @@ A `--simulate` flag replays a recorded sample file through the real UI, so contr
 
 ## Build and release
 
-GitHub Actions builds every pull request and publishes signed installers when a version tag (`v1.2.3`) is pushed.
+GitHub Actions builds every pull request and attaches installers to a draft release when a version tag (`v1.2.3`) is pushed.
 
 | Workflow | Trigger | Does |
 | --- | --- | --- |
-| `ci.yml` | Every push and pull request | `cargo fmt`, `clippy`, tests on Linux, macOS, Windows; builds the app on macOS and Windows |
-| `release.yml` | Tag `v*` | `tauri-action` builds a universal macOS .dmg and Windows .msi (x64, ARM64), signs them, creates a draft GitHub Release |
+| `ci.yml` | Pushes to `main` and every pull request | `cargo fmt`, `clippy`, tests on Linux, macOS, Windows; builds the app on macOS and Windows |
+| `release.yml` | Tag `v*`; pull requests that change it | `tauri-action` builds a universal macOS .dmg and Windows .msi (x64, ARM64). A tag creates a draft GitHub Release (a pre-release if the tag has a label, like `v0.5.0-beta.1`) and stops if the tag doesn't match the `Cargo.toml` version; a pull request only uploads the installers as workflow artifacts |
 
-- macOS signing and notarization: Developer ID certificate and Apple ID app password as repository secrets; until then, unsigned builds with Homebrew `--no-quarantine` instructions.
+- The `Cargo.toml` version stays plain numbers, because MSI versions can't carry labels; a tag's `-label` only marks the release as a pre-release.
+- macOS signing and notarization: Developer ID certificate and Apple ID app password as repository secrets. Until then, release builds are ad-hoc signed (`signingIdentity: "-"`, with the location entitlement), and the README explains the one-time **Open Anyway** step.
 - Windows signing: SignPath's free open-source plan, called from `release.yml`.
 - Auto-update: Tauri updater plugin reads `latest.json` from GitHub Releases; update files are signed with a Tauri key kept in secrets.
 - Distribution after v1.0: Homebrew cask and winget manifest, both updated by a workflow step.
