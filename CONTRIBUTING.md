@@ -53,6 +53,21 @@ The app doesn't run on Linux, but `thunder-core` builds and tests there, so you 
 cargo test -p thunder-core
 ```
 
+## Trying the macOS Wi-Fi backend
+
+The `probe` example runs the macOS backend on your real Wi-Fi, without the app:
+
+```bash
+cargo run -p wifi-macos --example probe -- permission   # answer the Location prompt once
+cargo run -p wifi-macos --example probe -- status       # current network, signal, router
+cargo run -p wifi-macos --example probe -- scan         # networks in range, strongest first
+cargo run -p wifi-macos --example probe -- save "Dorm-5G"     # store a password (asks for it)
+cargo run -p wifi-macos --example probe -- connect "Dorm-5G"  # join it
+cargo run -p wifi-macos --example probe -- watch        # signal every 5 s; close the lid to see sleep/wake
+```
+
+Passwords go in your login Keychain under the service `ThunderWiFi`; `probe forget "<name>"` removes one. The Keychain test is skipped by default because it writes to your Keychain (under `ThunderWiFi-test`, and cleans up): run it with `cargo test -p wifi-macos -- --ignored`.
+
 ## Running the app
 
 ```bash

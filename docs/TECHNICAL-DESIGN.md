@@ -86,18 +86,21 @@ pub trait WifiBackend: Send + Sync {
 
 | Need | API |
 | --- | --- |
-| Current link, RSSI | `CWWiFiClient.shared().interface()` → `ssid()`, `bssid()`, `rssiValue()` |
-| Scan | `scanForNetworksWithSSID(nil)` on a background thread |
-| Connect | `associateToNetwork(network, password)` |
-| Passwords | Keychain generic-password items, service `ThunderWiFi`, account = SSID |
-| Gateway | Read the default route (`route -n get default` equivalent via `sysctl`) |
-| Location permission | `CLLocationManager.requestWhenInUseAuthorization()`; without it SSIDs come back nil |
+| Current link, RSSI | `CWWiFiClient.shared().interface()` → `ssid()`, `bssid()`, `rssiValue()`; RSSI 0 means not associated |
+| Scan | `scanForNetworksWithName(nil)` on a background thread |
+| Connect | Scan for that name, pick its strongest access point, `associateToNetwork(network, password)` |
+| Known networks | macOS's Known Networks (`configuration().networkProfiles()`) plus networks with a password in the app's Keychain store |
+| Passwords | Keychain generic-password items, service `ThunderWiFi`, account = SSID (`PasswordStore`) |
+| Gateway | `Router` from the System Configuration key `State:/Network/Global/IPv4`, only when its `PrimaryInterface` is the Wi-Fi interface |
+| Location permission | `CLLocationManager.requestWhenInUseAuthorization()` on the main thread, manager kept alive there; without permission SSIDs come back nil and the backend returns `PermissionDenied` |
 | Open at login | `SMAppService.mainApp` (Tauri autostart plugin uses it) |
-| Sleep / wake | `NSWorkspace` will-sleep / did-wake notifications pause the engine |
+| Sleep / wake | `NSWorkspace` will-sleep / did-wake notifications (`SleepWatcher`) pause the engine |
 
 - Users add a network and its password once in Settings; macOS gives apps no access to the system's saved Wi-Fi passwords.
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
 - Ad-hoc signed builds trigger a Keychain prompt after each rebuild; Developer ID signing removes it for releases.
+- CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`.
+- `cargo run -p wifi-macos --example probe` exercises every call on real Wi-Fi without the app. `build.rs` embeds an Info.plist in it, so macOS shows it the Location prompt.
 
 ## Windows backend
 
