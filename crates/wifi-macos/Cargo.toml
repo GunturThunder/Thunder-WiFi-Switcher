@@ -1,0 +1,15 @@
+[package]
+name = "wifi-macos"
+description = "macOS Wi-Fi backend for Thunder WiFi Switcher (CoreWLAN + Keychain)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+# Phase 2 adds: thunder-core (for the WifiBackend trait) and objc2-core-wlan.
+[target.'cfg(target_os = "macos")'.dependencies]
+
+[lints]
+workspace = true

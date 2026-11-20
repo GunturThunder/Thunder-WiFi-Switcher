@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the app bundle's Info.plist by Tauri. -->
+<plist version="1.0">
+<dict>
+    <!-- Menu bar app: no Dock icon, no app menu. -->
+    <key>LSUIElement</key>
+    <true/>
+    <!-- Shown in the Location permission prompt. See PRIVACY.md. -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Thunder WiFi Switcher needs Location access because macOS only shows Wi-Fi network names to apps that have it. Your location is never read, stored or sent.</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Thunder WiFi Switcher needs Location access because macOS only shows Wi-Fi network names to apps that have it. Your location is never read, stored or sent.</string>
+</dict>
+</plist>
