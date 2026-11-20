@@ -2,7 +2,9 @@
 //! and the latest reading of the Wi-Fi link.
 
 use serde::Serialize;
-use thunder_core::{Engine, Error, Notice, PauseReason, Permission, Reason, Sample, State};
+use thunder_core::{
+    Engine, Error, Internet, Notice, PauseReason, Permission, Reason, Sample, State,
+};
 
 /// The Wi-Fi connection right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -40,6 +42,31 @@ pub enum Activity {
     Paused,
     /// The computer is asleep.
     Asleep,
+}
+
+/// What the internet checks say about the current network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InternetState {
+    /// Not judged yet, or not connected, or checks paused.
+    Unknown,
+    /// Works.
+    Good,
+    /// Both public servers slow or unreachable.
+    Bad,
+    /// The router is slow or not answering.
+    BadLink,
+}
+
+impl From<Internet> for InternetState {
+    fn from(internet: Internet) -> Self {
+        match internet {
+            Internet::Unknown => Self::Unknown,
+            Internet::Good => Self::Good,
+            Internet::Bad { .. } => Self::Bad,
+            Internet::BadLink { .. } => Self::BadLink,
+        }
+    }
 }
 
 /// Location permission, for the settings window.
@@ -92,6 +119,10 @@ pub struct Status {
     pub ssid: Option<String>,
     /// Current signal (dBm), when connected.
     pub rssi: Option<i32>,
+    /// Best median ping to the public servers, when connected and checked.
+    pub ping_ms: Option<u32>,
+    /// Whether the internet behind the network works.
+    pub internet: InternetState,
     /// Whether the current network is one of the user's (enabled) networks.
     pub managed: bool,
     /// What the engine is doing.
@@ -120,6 +151,8 @@ impl Status {
             connection: Connection::Starting,
             ssid: None,
             rssi: None,
+            ping_ms: None,
+            internet: InternetState::Unknown,
             managed: false,
             activity: activity(engine.state()),
             permission: permission.into(),
@@ -131,11 +164,12 @@ impl Status {
             None => {}
             Some(Ok(Sample::WifiOff)) => status.connection = Connection::Off,
             Some(Ok(Sample::Disconnected)) => status.connection = Connection::Disconnected,
-            Some(Ok(Sample::Connected(link))) => {
+            Some(Ok(Sample::Connected(link, internet))) => {
                 status.connection = Connection::Connected;
                 status.managed = engine.config().is_enabled(&link.ssid);
                 status.ssid = Some(link.ssid.clone());
                 status.rssi = Some(link.rssi);
+                status.internet = (*internet).into();
             }
             Some(Err(Error::PermissionDenied)) => status.connection = Connection::PermissionNeeded,
             Some(Err(err)) => {
@@ -146,11 +180,26 @@ impl Status {
         status
     }
 
-    /// The first line of the menu, e.g. `Connected: Dorm-5G · -58 dBm`.
+    /// Adds the latest ping (ignored unless connected).
+    pub fn with_ping(mut self, ping_ms: Option<u32>) -> Self {
+        if self.connection == Connection::Connected {
+            self.ping_ms = ping_ms;
+        }
+        self
+    }
+
+    /// The first line of the menu, e.g. `Connected: Dorm-5G · -58 dBm · 24 ms`.
     pub fn summary(&self) -> String {
         match (self.connection, &self.ssid, self.rssi) {
             (Connection::Connected, Some(ssid), Some(rssi)) => {
-                format!("Connected: {ssid} · {rssi} dBm")
+                let quality = match (self.internet, self.ping_ms) {
+                    (InternetState::Bad, None) => " · no internet".to_owned(),
+                    (InternetState::Bad, Some(_)) => " · slow internet".to_owned(),
+                    (InternetState::BadLink, _) => " · router not responding".to_owned(),
+                    (_, Some(ms)) => format!(" · {ms} ms"),
+                    (_, None) => String::new(),
+                };
+                format!("Connected: {ssid} · {rssi} dBm{quality}")
             }
             (Connection::Connected, _, _) => "Connected".into(),
             (Connection::Starting, _, _) => "Starting…".into(),
@@ -164,10 +213,11 @@ impl Status {
         }
     }
 
-    /// Short text next to the menu bar icon, e.g. `-58`. Ping joins it in v0.5.
+    /// Short text next to the menu bar icon, e.g. `-58 · 24ms`.
     pub fn label(&self) -> Option<String> {
-        match (self.connection, self.rssi) {
-            (Connection::Connected, Some(rssi)) => Some(rssi.to_string()),
+        match (self.connection, self.rssi, self.ping_ms) {
+            (Connection::Connected, Some(rssi), Some(ms)) => Some(format!("{rssi} · {ms}ms")),
+            (Connection::Connected, Some(rssi), None) => Some(rssi.to_string()),
             _ => None,
         }
     }
@@ -227,6 +277,26 @@ pub fn notice_text(notice: &Notice) -> String {
             reason: Reason::User,
             ..
         } => format!("Switched to {to}"),
+        Notice::Switched {
+            from: Some(from),
+            to,
+            reason: Reason::BadInternet { ping_ms, loss_pct },
+        } => match ping_ms {
+            Some(ms) if *loss_pct < 100 => format!(
+                "Switched from {from} to {to} (internet on {from} was slow: {ms} ms, {loss_pct}% loss)"
+            ),
+            _ => format!("Switched from {from} to {to} (no internet on {from})"),
+        },
+        Notice::Switched {
+            from: Some(from),
+            to,
+            reason: Reason::BadLink { .. },
+        } => format!("Switched from {from} to {to} ({from}'s router stopped responding)"),
+        Notice::Switched {
+            to,
+            reason: Reason::BadInternet { .. } | Reason::BadLink { .. },
+            ..
+        } => format!("Switched to {to} (bad internet)"),
         Notice::ConnectFailed { ssid, error } => format!("Couldn't join {ssid}: {error}"),
     }
 }
@@ -244,12 +314,71 @@ mod tests {
     }
 
     fn link(ssid: &str, rssi: i32) -> Sample {
-        Sample::Connected(Link {
-            ssid: ssid.into(),
-            bssid: None,
-            rssi,
-            channel: None,
-        })
+        link_with(ssid, rssi, Internet::Good)
+    }
+
+    fn link_with(ssid: &str, rssi: i32, internet: Internet) -> Sample {
+        Sample::Connected(
+            Link {
+                ssid: ssid.into(),
+                bssid: None,
+                rssi,
+                channel: None,
+            },
+            internet,
+        )
+    }
+
+    #[test]
+    fn ping_shows_in_the_menu_and_label() {
+        let status = status(Ok(link("Dorm-5G", -58))).with_ping(Some(24));
+        assert_eq!(status.summary(), "Connected: Dorm-5G · -58 dBm · 24 ms");
+        assert_eq!(status.label().as_deref(), Some("-58 · 24ms"));
+        assert_eq!(status.internet, InternetState::Good);
+    }
+
+    #[test]
+    fn bad_internet_shows_in_the_menu() {
+        let down = Internet::Bad {
+            ping_ms: None,
+            loss_pct: 100,
+        };
+        let status = status(Ok(link_with("Dorm-5G", -50, down)));
+        assert_eq!(
+            status.summary(),
+            "Connected: Dorm-5G · -50 dBm · no internet"
+        );
+        assert_eq!(status.internet, InternetState::Bad);
+
+        let slow = Internet::Bad {
+            ping_ms: Some(900),
+            loss_pct: 0,
+        };
+        let status = status_of(link_with("Dorm-5G", -50, slow)).with_ping(Some(900));
+        assert_eq!(
+            status.summary(),
+            "Connected: Dorm-5G · -50 dBm · slow internet"
+        );
+
+        let router = Internet::BadLink {
+            ping_ms: None,
+            loss_pct: 100,
+        };
+        let status = status_of(link_with("Dorm-5G", -50, router));
+        assert_eq!(
+            status.summary(),
+            "Connected: Dorm-5G · -50 dBm · router not responding"
+        );
+    }
+
+    fn status_of(sample: Sample) -> Status {
+        status(Ok(sample))
+    }
+
+    #[test]
+    fn ping_is_dropped_when_not_connected() {
+        let status = status(Ok(Sample::Disconnected)).with_ping(Some(24));
+        assert_eq!(status.ping_ms, None);
     }
 
     fn status(reading: Result<Sample, Error>) -> Status {
@@ -319,6 +448,36 @@ mod tests {
         assert_eq!(
             notice_text(&switched(Some("A"), Reason::User)),
             "Switched to B"
+        );
+        assert_eq!(
+            notice_text(&switched(
+                Some("A"),
+                Reason::BadInternet {
+                    ping_ms: None,
+                    loss_pct: 100
+                }
+            )),
+            "Switched from A to B (no internet on A)"
+        );
+        assert_eq!(
+            notice_text(&switched(
+                Some("A"),
+                Reason::BadInternet {
+                    ping_ms: Some(850),
+                    loss_pct: 40
+                }
+            )),
+            "Switched from A to B (internet on A was slow: 850 ms, 40% loss)"
+        );
+        assert_eq!(
+            notice_text(&switched(
+                Some("A"),
+                Reason::BadLink {
+                    ping_ms: None,
+                    loss_pct: 100
+                }
+            )),
+            "Switched from A to B (A's router stopped responding)"
         );
         assert_eq!(
             notice_text(&Notice::ConnectFailed {

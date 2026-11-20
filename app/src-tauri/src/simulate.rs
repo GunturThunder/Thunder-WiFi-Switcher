@@ -2,8 +2,10 @@
 //! can be tried (and worked on) without real Wi-Fi switching.
 //!
 //! A 6-minute loop: sit at your desk on Dorm-5G, walk to the common room
-//! (Dorm-5G fades, Dorm-2.4 gets stronger, so the app switches), walk back,
-//! then Dorm-2.4's router restarts for 15 seconds (the app reconnects).
+//! (Dorm-5G fades, Dorm-2.4 gets stronger, so the app switches on weak
+//! signal), walk back (it stays on Dorm-2.4, which is fine), then Dorm-2.4's
+//! internet goes down for 40 seconds while its signal stays strong (the app
+//! switches back to Dorm-5G on bad internet).
 
 use std::sync::Arc;
 use std::thread;
@@ -16,6 +18,8 @@ pub const NETWORKS: [&str; 3] = ["Dorm-5G", "Dorm-2.4", "Library"];
 
 /// Seconds per step of the loop.
 const STEP: Duration = Duration::from_secs(5);
+/// Steps during which Dorm-2.4 has no internet.
+const OUTAGE: std::ops::Range<u32> = 52..60;
 
 /// Starts the pretend Wi-Fi and the thread that changes its signal.
 pub fn start() -> Arc<FakeBackend> {
@@ -34,13 +38,11 @@ pub fn start() -> Arc<FakeBackend> {
                 thread::sleep(STEP);
                 let (five, two, library) = levels(step);
                 shared.set_network(NETWORKS[0], five);
+                shared.set_network(NETWORKS[1], two);
                 shared.set_network(NETWORKS[2], library);
-                // Dorm-2.4's router restarts near the end of the loop.
-                if (60..63).contains(&step) {
-                    shared.remove_network(NETWORKS[1]);
-                } else {
-                    shared.set_network(NETWORKS[1], two);
-                }
+                // Dorm-2.4's internet goes down near the end of the loop.
+                let outage = OUTAGE.contains(&step);
+                shared.set_internet(NETWORKS[1], if outage { None } else { Some(24) });
             }
         })
         .expect("can start the simulation thread");

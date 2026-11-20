@@ -27,6 +27,8 @@ export function createMockApi(): Api {
     connection: 'connected',
     ssid: 'Dorm-5G',
     rssi: -58,
+    ping_ms: 24,
+    internet: 'good',
     managed: true,
     activity: 'watching',
     permission: windows ? 'denied' : 'not_determined',

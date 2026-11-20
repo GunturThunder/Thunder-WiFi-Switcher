@@ -48,8 +48,8 @@
   <section>
     <h2>Internet quality</h2>
     <p class="hint">
-      Coming in v0.5: switch when the internet is bad even though the signal is strong. These limits are
-      saved now and used then.
+      Switch when the internet stays bad for 15 seconds even though the signal is strong. Every 5 seconds the app
+      pings your router and the targets below; a network left for bad internet is skipped for 10 minutes.
     </p>
     <div class="grid">
       <label for="ping">Bad ping above</label>

@@ -59,7 +59,7 @@
       />
       <span>
         <strong>Show signal next to the menu bar icon</strong>
-        <small>For example <code>-58</code>. Ping joins it in v0.5.</small>
+        <small>For example <code>-58 · 24ms</code> (signal and ping).</small>
       </span>
     </label>
 
