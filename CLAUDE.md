@@ -136,4 +136,5 @@ Windows:
 - **Branches and PRs.** One branch and one PR per phase or change; never push to `main`. `main` is protected: a PR is required, and the checks `Core and UI (Linux)`, `App (macOS)` and `App (Windows)` must pass. PRs are squash-merged.
 - **Commits.** Messages are in the imperative, split into logical commits (core / backends / app / docs). The body says why.
 - **Before pushing,** run fmt, Clippy (macOS, plus the Windows and Linux cross-checks above), `cargo test --workspace`, and `npm run check` in `app/`.
+- **Releases** (maintainer only): bump the numeric version in `Cargo.toml` in a PR, then tag `main` (`v0.5.0`, or `v0.5.0-beta.1` for a pre-release). `release.yml` builds the installers into a draft release. Run `docs/TESTING.md` on both OSes, then publish. Details are in CONTRIBUTING.md → Releasing.
 - **Testing on real hardware.** On macOS, use the probe and `run-app-macos.sh`. Beyond CI, the Windows backend needs a real Windows laptop: use the Windows probe there.

@@ -136,6 +136,20 @@ On Linux, add `--exclude thunder-wifi-switcher` to the `clippy` and `test` comma
 - Add a line to the `Unreleased` section of [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
 - Write commit messages in the imperative ("Add Keychain store", not "Added Keychain store").
 
+## Releasing (maintainers)
+
+1. In a pull request, set the version in `Cargo.toml` (`[workspace.package]`) and move the `Unreleased` changelog entries under the new version. Keep the version plain numbers (`0.5.0`): Windows installers can't carry labels like `-beta`.
+2. After it's merged, tag `main` and push the tag. A tag with a label marks a pre-release of that version:
+
+   ```bash
+   git tag v0.5.0-beta.1 && git push origin v0.5.0-beta.1
+   ```
+
+3. `release.yml` builds the macOS `.dmg` (universal) and the Windows `.msi` (x64 and ARM64) and attaches them to a **draft** release. It stops if the tag doesn't match the version.
+4. Run [docs/TESTING.md](docs/TESTING.md) with those installers on a Mac and a Windows laptop, then publish the draft.
+
+A pull request that changes `release.yml` builds the same installers as workflow artifacts (on the PR's checks page), without releasing anything.
+
 ## Security issues
 
 Please don't report security problems in public issues. See [SECURITY.md](SECURITY.md).
