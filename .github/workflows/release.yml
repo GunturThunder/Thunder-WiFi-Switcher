@@ -1,0 +1,91 @@
+name: Release
+
+# Pushing a version tag (v0.1.0, v0.5.0-beta.1, …) builds the installers and
+# attaches them to a draft GitHub Release, which the maintainer reviews and
+# publishes. A pull request that changes this file builds the same installers
+# as workflow artifacts, without releasing anything, to prove packaging works.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal)
+            os: macos-latest
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles dmg
+          - name: Windows x64
+            os: windows-latest
+            targets: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles msi
+          - name: Windows ARM64
+            os: windows-latest
+            targets: aarch64-pc-windows-msvc
+            args: --target aarch64-pc-windows-msvc --bundles msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the tag matches the app version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ "v$version" != "${GITHUB_REF_NAME%%-*}" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the version in Cargo.toml ($version)."
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tauriScript: npx tauri
+          args: ${{ matrix.args }}
+          # Only a tag push creates (or adds to) a release.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: Thunder WiFi Switcher ${{ github.ref_name }}
+          releaseBody: |
+            Download the installer for your computer below:
+            - **macOS** (Apple Silicon and Intel): the `.dmg`
+            - **Windows** (most PCs): the `x64` `.msi`; on ARM laptops, the `arm64` `.msi`
+
+            These builds aren't signed yet, so macOS and Windows will warn you the first time. See [Install](https://github.com/GunturThunder/Thunder-WiFi-Switcher#install) for the one-time steps, and [CHANGELOG.md](https://github.com/GunturThunder/Thunder-WiFi-Switcher/blob/main/CHANGELOG.md) for what's new.
+          releaseDraft: true
+          # v0.1.0-alpha.1 and the like are marked as pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          uploadWorkflowArtifacts: true
