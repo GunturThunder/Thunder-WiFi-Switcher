@@ -15,6 +15,7 @@
 
 mod backend;
 mod gateway;
+mod icmp;
 mod power;
 mod wlan;
 

@@ -13,6 +13,7 @@
 //!   save <name>       save a network's password in the Keychain (asks for it)
 //!   forget <name>     delete a saved password
 //!   connect <name>    join a network, using its saved password
+//!   ping              ping the router, 1.1.1.1 and 8.8.8.8 (and try port 443)
 //!   watch             print the signal every 5 seconds, plus sleep and wake
 //! ```
 
@@ -47,6 +48,7 @@ usage: scripts/probe-macos.sh <command>
   save <name>       save a network's password in the Keychain (asks for it)
   forget <name>     delete a saved password
   connect <name>    join a network, using its saved password
+  ping              ping the router, 1.1.1.1 and 8.8.8.8 (and try port 443)
   watch             print the signal every 5 seconds, plus sleep and wake";
 
     pub fn main() -> ExitCode {
@@ -66,6 +68,7 @@ usage: scripts/probe-macos.sh <command>
             ["save", ssid] => save(&wifi, ssid),
             ["forget", ssid] => forget(&wifi, ssid),
             ["connect", ssid] => connect(&wifi, ssid),
+            ["ping"] => ping(&wifi),
             ["watch"] => watch(&wifi),
             _ => {
                 eprintln!("{USAGE}");
@@ -224,6 +227,28 @@ usage: scripts/probe-macos.sh <command>
         status(wifi)
     }
 
+    fn ping(wifi: &MacBackend) -> Result<(), Error> {
+        let mut targets: Vec<(String, std::net::IpAddr)> = Vec::new();
+        if let Some(router) = wifi.gateway()? {
+            targets.push((format!("router {router}"), router));
+        }
+        for server in ["1.1.1.1", "8.8.8.8"] {
+            targets.push((server.to_string(), server.parse().expect("valid address")));
+        }
+        println!("Target                 Ping        Port 443");
+        for (name, addr) in targets {
+            let show = |result: thunder_core::Result<Duration>| match result {
+                Ok(rtt) => format!("{} ms", rtt.as_millis()),
+                Err(Error::Timeout) => "no answer".to_string(),
+                Err(err) => format!("{err}"),
+            };
+            let icmp = show(wifi.ping(addr, Duration::from_secs(2)));
+            let tcp = show(wifi.tcp_probe(addr, Duration::from_secs(2)));
+            println!("{name:<22} {icmp:<11} {tcp}");
+        }
+        Ok(())
+    }
+
     fn watch(wifi: &MacBackend) -> Result<(), Error> {
         let (tx, rx) = mpsc::channel();
         let _watcher = SleepWatcher::new(move |event| {
@@ -236,7 +261,7 @@ usage: scripts/probe-macos.sh <command>
             let line = match read_sample(wifi) {
                 Ok(Sample::WifiOff) => "Wi-Fi off".to_string(),
                 Ok(Sample::Disconnected) => "not connected".to_string(),
-                Ok(Sample::Connected(link)) => format!("{:>4} dBm  {}", link.rssi, link.ssid),
+                Ok(Sample::Connected(link, _)) => format!("{:>4} dBm  {}", link.rssi, link.ssid),
                 Err(err) => format!("error: {err}"),
             };
             println!("{:02}:{:02}  {line}", elapsed / 60, elapsed % 60);

@@ -18,6 +18,7 @@
 
 mod backend;
 mod gateway;
+mod icmp;
 mod keychain;
 mod location;
 mod power;
