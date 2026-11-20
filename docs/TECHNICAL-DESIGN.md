@@ -120,26 +120,39 @@ pub trait WifiBackend: Send + Sync {
 
 ## Switching engine
 
-The engine is a pure function: `step(state, sample, now) -> (state, Action)`. It reads no clock and touches no OS, so every rule is unit-tested with recorded or invented samples.
+The engine is a state machine with one entry point: `Engine::step(now, event) -> Action`. It reads no clock and touches no OS, so every rule is tested with scripted events. `now` is any monotonic time; only differences matter.
+
+- **Events in:** `Sample` (every 5 s: `WifiOff`, `Disconnected` or `Connected(link)`), `ScanDone(result)`, `ConnectDone { ssid, result }`, `Sleep`, `Wake`. Settings changes go through `Engine::set_config`.
+- **Actions out:** `None`, `Scan`, `Connect { ssid }`, `Notify(notice)`. A notice is `Switched { from, to, reason }` or `ConnectFailed { ssid, error }`.
+- **Driver:** `thunder_core::Driver` runs the loop against any `WifiBackend`: read a sample, do what the engine asks, feed the result back. The Tauri shell calls it every 5 s on a worker thread; tests call it with the fake backend.
 
 | State | Leaves when | Goes to |
 | --- | --- | --- |
-| Watching | 3 bad samples in a row (15 s) | Degraded → asks for a scan |
+| Watching | 3 bad samples in a row (15 s) | Scanning |
 | Watching | Disconnected | Scanning (no wait) |
 | Scanning | Scan results arrive | Switching if a candidate wins, else Backoff |
 | Switching | Connect succeeds or fails | Cooldown 30 s (success) / Backoff (failure) |
-| Backoff | Timer ends (30 s, 60 s, 120 s, up to 300 s) | Watching; resets to 30 s once a sample is good |
-| Paused | User resumes, or wake from sleep | Watching |
+| Scanning, Switching | No answer for 60 s | Backoff |
+| Cooldown | Timer ends (30 s after a switch, 15 s after waking) | Watching. Samples during a cooldown are ignored. |
+| Backoff | A good sample | Watching, and the next backoff starts at 30 s again |
+| Backoff | Timer ends (30 s, 60 s, 120 s, 240 s, then 300 s) and the problem is still there | Scanning |
+| Backoff | Connection drops while backing off from a weak signal | Scanning (no wait) |
+| Paused | User turns auto-switch back on | Watching |
+| Paused | Wake from sleep (if the user hadn't paused it) | Cooldown 15 s, so the OS can rejoin a network itself first |
 
-A sample is bad when signal is under the threshold (default -75 dBm), or both public targets show ping over 300 ms or loss over 10%, or the router ping fails.
+A sample is bad when signal is under the threshold (default -75 dBm; -75 itself is fine). From Phase 4 it is also bad when both public targets show ping over 300 ms or loss over 10%, or the router ping fails.
 
-A candidate wins when it is a saved, enabled network and scores higher than the current one by a margin:
+The engine stays hands-off when Wi-Fi is off, when the user has no enabled networks, and when the laptop is on a network that isn't in the user's list or is turned off there (a café, a phone hotspot). Those samples never start a search.
 
-- Signal margin: at least 8 dBm stronger.
-- Or, when the current problem is internet quality, the candidate must be one not marked "bad internet" in the last 10 minutes; its quality is confirmed right after joining, and a failed check marks it and returns to Backoff.
-- User priority breaks ties: higher in the list wins when two candidates are within 3 dBm.
+A candidate wins when it is a saved, enabled network in the scan and scores higher than the current one by a margin:
 
-`Action` is one of `None`, `Scan`, `Connect(ssid)`, `Notify(msg)`; the Tauri shell runs actions on a worker thread and feeds results back as events.
+- Each network is judged by its strongest access point in the scan.
+- Signal margin: at least 8 dBm stronger. When disconnected, any candidate will do.
+- A network that failed to connect is skipped for 10 minutes, so a wrong password doesn't block the next-best network.
+- From Phase 4, when the current problem is internet quality, the candidate must be one not marked "bad internet" in the last 10 minutes; its quality is confirmed right after joining, and a failed check marks it and returns to Backoff.
+- User priority breaks ties: higher in the list wins when two candidates are within 3 dBm of the strongest.
+
+All of these numbers are constants in `thunder_core::rules`; only the weak-signal level is a user setting.
 
 ## Quality checks
 
@@ -185,7 +198,9 @@ enabled = true
 | macOS | `~/Library/Application Support/ThunderWiFi/config.toml` | `~/Library/Logs/ThunderWiFi/` |
 | Windows | `%APPDATA%\ThunderWiFi\config.toml` | `%LOCALAPPDATA%\ThunderWiFi\logs\` |
 
-- `version` allows safe migrations; an unreadable file is renamed `.bak` and defaults are used.
+- `version` allows safe migrations; an unreadable file (not valid TOML) is renamed `config.toml.bak` and defaults are used.
+- A valid file with one bad value (wrong type, out of range, unknown language) keeps everything else: only that value falls back to its default, and the change is logged.
+- Saving writes a temporary file and renames it, so a crash mid-write never leaves a half-written config.
 - History for the graph (nice-to-have) goes in a small SQLite file next to the config, kept 7 days.
 
 ## Tray UI and settings window
