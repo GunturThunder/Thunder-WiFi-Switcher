@@ -1,12 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Embedded in the probe example by build.rs. -->
+<!-- Info.plist for the probe's app bundle, built by scripts/probe-macos.sh. -->
 <plist version="1.0">
 <dict>
+    <key>CFBundleExecutable</key>
+    <string>probe</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.gunturthunder.thunderwifi.probe</string>
     <key>CFBundleName</key>
-    <string>Thunder WiFi probe</string>
+    <string>Thunder WiFi Probe</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <!-- No Dock icon. -->
+    <key>LSUIElement</key>
+    <true/>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>The Thunder WiFi probe needs Location access because macOS only shows Wi-Fi network names to apps that have it. Your location is never read, stored or sent.</string>
     <key>NSLocationUsageDescription</key>

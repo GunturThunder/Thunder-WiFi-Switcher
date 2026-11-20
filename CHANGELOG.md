@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - macOS Wi-Fi backend (`wifi-macos`): reads the current network and signal, scans, joins networks with passwords from the Keychain, lists known networks, finds the router, asks for Location permission, and reports sleep and wake.
-- `probe` tool for trying the macOS backend on real Wi-Fi (`cargo run -p wifi-macos --example probe`).
+- `probe` tool for trying the macOS backend on real Wi-Fi (`scripts/probe-macos.sh`).
 - Switching engine in `thunder-core`: watches signal every 5 seconds, switches after 15 seconds of weak signal to a saved network at least 8 dB stronger, reconnects straight away when Wi-Fi drops, and backs off from 30 seconds to 5 minutes when nothing better is in range.
 - Settings file (TOML) with defaults, forgiving loading of hand-edited files, and recovery from unreadable files.
 - Fake Wi-Fi backend and scenario tests (walking away, flapping signal, two equal networks, dropped connection, sleep and wake).

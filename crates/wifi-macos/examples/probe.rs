@@ -1,7 +1,10 @@
 //! Try the macOS backend on real Wi-Fi, without the app.
 //!
+//! Run it with `scripts/probe-macos.sh`, which wraps it in a small app bundle:
+//! macOS never shows the Location prompt to a plain command-line tool.
+//!
 //! ```text
-//! cargo run -p wifi-macos --example probe -- <command>
+//! scripts/probe-macos.sh <command>
 //!
 //!   status            Wi-Fi power, permission, current network, router (default)
 //!   permission        ask for Location permission (shows the macOS prompt)
@@ -35,7 +38,7 @@ mod probe {
     use wifi_macos::{MacBackend, SleepWatcher};
 
     const USAGE: &str = "\
-usage: cargo run -p wifi-macos --example probe -- <command>
+usage: scripts/probe-macos.sh <command>
 
   status            Wi-Fi power, permission, current network, router (default)
   permission        ask for Location permission (shows the macOS prompt)

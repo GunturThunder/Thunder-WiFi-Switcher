@@ -100,7 +100,8 @@ pub trait WifiBackend: Send + Sync {
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
 - Ad-hoc signed builds trigger a Keychain prompt after each rebuild; Developer ID signing removes it for releases.
 - CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`.
-- `cargo run -p wifi-macos --example probe` exercises every call on real Wi-Fi without the app. `build.rs` embeds an Info.plist in it, so macOS shows it the Location prompt.
+- macOS only shows the Location prompt to processes launched as apps. A binary started from Terminal (including `tauri dev`) is never asked, so real-Wi-Fi testing needs a bundled build opened with `open`.
+- `scripts/probe-macos.sh` exercises every backend call on real Wi-Fi without the app: it wraps the `probe` example in a small app bundle and launches it with `open`, with the terminal as its input and output.
 
 ## Windows backend
 

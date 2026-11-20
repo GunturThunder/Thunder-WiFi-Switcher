@@ -55,18 +55,18 @@ cargo test -p thunder-core
 
 ## Trying the macOS Wi-Fi backend
 
-The `probe` example runs the macOS backend on your real Wi-Fi, without the app:
+`scripts/probe-macos.sh` runs the macOS backend on your real Wi-Fi, without the app. It wraps the `probe` example in a small app bundle (`target/probe/Thunder WiFi Probe.app`), because macOS never shows the Location prompt to a plain command-line tool.
 
 ```bash
-cargo run -p wifi-macos --example probe -- permission   # answer the Location prompt once
-cargo run -p wifi-macos --example probe -- status       # current network, signal, router
-cargo run -p wifi-macos --example probe -- scan         # networks in range, strongest first
-cargo run -p wifi-macos --example probe -- save "Dorm-5G"     # store a password (asks for it)
-cargo run -p wifi-macos --example probe -- connect "Dorm-5G"  # join it
-cargo run -p wifi-macos --example probe -- watch        # signal every 5 s; close the lid to see sleep/wake
+scripts/probe-macos.sh permission         # answer the Location prompt once
+scripts/probe-macos.sh status             # current network, signal, router
+scripts/probe-macos.sh scan               # networks in range, strongest first
+scripts/probe-macos.sh save "Dorm-5G"     # store a password (asks for it)
+scripts/probe-macos.sh connect "Dorm-5G"  # join it
+scripts/probe-macos.sh watch              # signal every 5 s; close the lid to see sleep/wake
 ```
 
-Passwords go in your login Keychain under the service `ThunderWiFi`; `probe forget "<name>"` removes one. The Keychain test is skipped by default because it writes to your Keychain (under `ThunderWiFi-test`, and cleans up): run it with `cargo test -p wifi-macos -- --ignored`.
+Passwords go in your login Keychain under the service `ThunderWiFi`; `scripts/probe-macos.sh forget "<name>"` removes one. The Keychain test is skipped by default because it writes to your Keychain (under `ThunderWiFi-test`, and cleans up): run it with `cargo test -p wifi-macos -- --ignored`.
 
 ## Running the app
 
