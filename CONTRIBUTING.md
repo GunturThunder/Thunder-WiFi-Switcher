@@ -62,6 +62,7 @@ cargo run -p wifi-windows --example probe -- status           # current network,
 cargo run -p wifi-windows --example probe -- scan             # networks in range, strongest first
 cargo run -p wifi-windows --example probe -- known            # networks Windows has saved
 cargo run -p wifi-windows --example probe -- connect "Dorm-5G" # join one (it must be saved in Windows first)
+cargo run -p wifi-windows --example probe -- ping             # router, 1.1.1.1, 8.8.8.8: ping and port 443
 cargo run -p wifi-windows --example probe -- watch            # signal every 5 s; sleep the PC to see sleep/wake
 ```
 
@@ -77,6 +78,7 @@ scripts/probe-macos.sh status             # current network, signal, router
 scripts/probe-macos.sh scan               # networks in range, strongest first
 scripts/probe-macos.sh save "Dorm-5G"     # store a password (asks for it)
 scripts/probe-macos.sh connect "Dorm-5G"  # join it
+scripts/probe-macos.sh ping               # router, 1.1.1.1, 8.8.8.8: ping and port 443
 scripts/probe-macos.sh watch              # signal every 5 s; close the lid to see sleep/wake
 ```
 
@@ -88,7 +90,7 @@ Passwords go in your login Keychain under the service `ThunderWiFi`; `scripts/pr
 
 The app lives in the menu bar (macOS) or system tray (Windows); there's no Dock icon or main window. Choose **Settings…** from its menu to open the settings window.
 
-**With pretend networks** (no real switching, works on any Mac or PC): `--simulate` runs three networks whose signal changes on a 6-minute loop, so you can watch it switch. It keeps its own settings file (`config-simulate.toml`).
+**With pretend networks** (no real switching, works on any Mac or PC): `--simulate` runs three networks whose signal changes on a 6-minute loop, plus an internet outage, so you can watch it switch on weak signal and on bad internet. It keeps its own settings file (`config-simulate.toml`).
 
 ```bash
 cd app

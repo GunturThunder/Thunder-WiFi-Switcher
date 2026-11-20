@@ -3,6 +3,7 @@
 
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// The network the laptop is connected to right now.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +89,21 @@ pub trait WifiBackend: Send + Sync {
     fn request_permission(&self);
     /// Whether the Wi-Fi radio is on.
     fn powered(&self) -> bool;
+
+    /// Sends one ICMP echo ("ping") and returns the round-trip time. Must not
+    /// need admin rights. The default has no ICMP, so every check uses the
+    /// port-443 fallback instead.
+    fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        let _ = (addr, timeout);
+        Err(Error::Os("ICMP isn't available".into()))
+    }
+
+    /// Opens a TCP connection to port 443 and returns how long that took; a
+    /// refused connection still counts, since the host answered. The fallback
+    /// for networks that block ping. The default uses the standard library.
+    fn tcp_probe(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        crate::quality::tcp_connect(addr, timeout)
+    }
 }
 
 /// Lets the app share one backend between the worker thread and the UI.
@@ -115,5 +131,11 @@ impl<T: WifiBackend + ?Sized> WifiBackend for Arc<T> {
     }
     fn powered(&self) -> bool {
         (**self).powered()
+    }
+    fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        (**self).ping(addr, timeout)
+    }
+    fn tcp_probe(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        (**self).tcp_probe(addr, timeout)
     }
 }

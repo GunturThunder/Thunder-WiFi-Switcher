@@ -9,8 +9,8 @@ use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use windows::core::{PCWSTR, w};
 
-use crate::gateway;
 use crate::wlan::{Session, bssid_text, quality_to_dbm};
+use crate::{gateway, icmp};
 
 /// Windows drivers must finish a scan within 4 seconds.
 const SCAN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -142,5 +142,9 @@ impl WifiBackend for WinBackend {
                 Ok(session.radio_on(&interface))
             })
             .unwrap_or(false)
+    }
+
+    fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        icmp::ping(addr, timeout)
     }
 }

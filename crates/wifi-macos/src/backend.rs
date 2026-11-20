@@ -11,7 +11,7 @@ use objc2_foundation::{NSError, NSString};
 use thunder_core::{Error, Link, Permission, Result, ScanResult, WifiBackend};
 
 use crate::keychain::PasswordStore;
-use crate::{gateway, location};
+use crate::{gateway, icmp, location};
 
 /// The macOS backend. Cheap to share: it holds no CoreWLAN objects, it asks
 /// for the Wi-Fi interface on each call.
@@ -178,6 +178,10 @@ impl WifiBackend for MacBackend {
     fn powered(&self) -> bool {
         // SAFETY: plain getter.
         interface().is_ok_and(|iface| unsafe { iface.powerOn() })
+    }
+
+    fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
+        icmp::ping(addr, timeout)
     }
 }
 

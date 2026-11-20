@@ -441,3 +441,160 @@ fn losing_the_connection_during_a_backoff_reconnects_straight_away() {
     sim.tick();
     assert_eq!(sim.switches(), [(dropped_at, "Dorm-B".to_string())]);
 }
+
+// ----- Internet quality (Phase 4) -----
+
+fn server(addr: &str) -> std::net::IpAddr {
+    addr.parse().unwrap()
+}
+
+/// Two strong networks, connected to Dorm-A, everything working for a minute.
+fn two_strong_networks() -> Sim {
+    let mut sim = Sim::new(&["Dorm-A", "Dorm-B"]);
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.set_network("Dorm-B", -62);
+    sim.wifi.join("Dorm-A");
+    sim.run(mins(1));
+    assert!(sim.switches().is_empty());
+    sim
+}
+
+#[test]
+fn strong_signal_but_no_internet_switches_within_30_seconds() {
+    let mut sim = two_strong_networks();
+    let outage = sim.now;
+    sim.wifi.set_internet("Dorm-A", None);
+    sim.run(mins(2));
+
+    let switches = sim.switches();
+    assert_eq!(switches.len(), 1, "{switches:?}");
+    let (at, to) = &switches[0];
+    assert_eq!(to, "Dorm-B");
+    assert!(*at - outage <= secs(30), "took {:?}", *at - outage);
+    assert!(matches!(
+        sim.notices[0].1,
+        Notice::Switched {
+            reason: Reason::BadInternet { .. },
+            ..
+        }
+    ));
+}
+
+#[test]
+fn slow_internet_switches_within_30_seconds() {
+    let mut sim = two_strong_networks();
+    let slowdown = sim.now;
+    sim.wifi.set_internet("Dorm-A", Some(900));
+    sim.run(mins(2));
+
+    let switches = sim.switches();
+    assert_eq!(switches.len(), 1, "{switches:?}");
+    assert!(
+        switches[0].0 - slowdown <= secs(30),
+        "took {:?}",
+        switches[0].0 - slowdown
+    );
+}
+
+#[test]
+fn one_public_server_down_does_not_switch() {
+    let mut sim = two_strong_networks();
+    sim.wifi.set_server_down(server("1.1.1.1"), true);
+    sim.run(mins(10));
+    assert!(sim.switches().is_empty());
+    assert_eq!(sim.scans(), 0);
+}
+
+#[test]
+fn a_network_that_blocks_ping_is_not_called_bad() {
+    let mut sim = Sim::new(&["Dorm-A", "Dorm-B"]);
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.set_network("Dorm-B", -62);
+    sim.wifi.block_icmp("Dorm-A");
+    sim.wifi.join("Dorm-A");
+    sim.run(mins(10));
+
+    assert!(sim.switches().is_empty());
+    let quality = sim.driver.quality().expect("connected and checking");
+    assert!(
+        quality.public.iter().all(|target| target.tcp),
+        "{quality:?}"
+    );
+    assert_eq!(quality.ping_ms(), Some(20));
+}
+
+#[test]
+fn a_router_that_never_answers_is_ignored() {
+    let mut sim = Sim::new(&["Dorm-A", "Dorm-B"]);
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.set_network("Dorm-B", -62);
+    sim.wifi.set_router("Dorm-A", None);
+    sim.wifi.join("Dorm-A");
+    sim.run(mins(10));
+    assert!(sim.switches().is_empty());
+}
+
+#[test]
+fn a_router_that_stops_answering_is_a_bad_link() {
+    let mut sim = two_strong_networks();
+    sim.wifi.set_router("Dorm-A", None);
+    sim.run(mins(2));
+    let switches = sim.switches();
+    assert_eq!(switches.len(), 1, "{switches:?}");
+    assert!(matches!(
+        sim.notices[0].1,
+        Notice::Switched {
+            reason: Reason::BadLink { .. },
+            ..
+        }
+    ));
+}
+
+#[test]
+fn bad_internet_everywhere_does_not_ping_pong() {
+    let mut sim = two_strong_networks();
+    sim.wifi.set_internet("Dorm-A", None);
+    sim.wifi.set_internet("Dorm-B", None);
+    sim.run(mins(9));
+    // Tries Dorm-B once; Dorm-A stays marked for 10 minutes, so no way back.
+    assert_eq!(sim.switches().len(), 1, "{:?}", sim.switches());
+    assert_eq!(sim.connected().as_deref(), Some("Dorm-B"));
+}
+
+#[test]
+fn a_network_left_for_bad_internet_is_skipped_for_ten_minutes() {
+    let mut sim = two_strong_networks();
+    sim.wifi.set_internet("Dorm-A", None);
+    sim.run(mins(1));
+    assert_eq!(sim.connected().as_deref(), Some("Dorm-B"));
+    let left_at = sim.switches()[0].0;
+
+    // Dorm-A's internet comes back, then Dorm-B's dies.
+    sim.wifi.set_internet("Dorm-A", Some(20));
+    sim.wifi.set_internet("Dorm-B", None);
+    sim.run(mins(15));
+
+    let back = sim
+        .switches()
+        .into_iter()
+        .find(|(_, to)| to == "Dorm-A")
+        .expect("goes back to Dorm-A eventually");
+    assert!(
+        back.0 - left_at >= mins(10),
+        "came back after {:?}",
+        back.0 - left_at
+    );
+}
+
+#[test]
+fn quality_is_not_checked_while_paused() {
+    let mut sim = Sim::with_config(Config {
+        auto_switch: false,
+        networks: vec![Network::new("Dorm-A")],
+        ..Config::default()
+    });
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.join("Dorm-A");
+    sim.run(mins(1));
+    assert!(sim.driver.quality().is_none());
+}

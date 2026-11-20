@@ -106,13 +106,17 @@ impl Worker {
                             if asleep {
                                 Vec::new()
                             } else {
-                                let sample = read_sample(driver.backend());
-                                let notices = match &sample {
-                                    Ok(sample) => driver.handle(now, Event::Sample(sample.clone())),
-                                    Err(_) => Vec::new(),
-                                };
-                                reading = Some(sample);
-                                notices
+                                // Reads the link, checks the internet, acts.
+                                match driver.tick(now) {
+                                    Ok(notices) => {
+                                        reading = driver.engine().last_sample().cloned().map(Ok);
+                                        notices
+                                    }
+                                    Err(err) => {
+                                        reading = Some(Err(err));
+                                        Vec::new()
+                                    }
+                                }
                             }
                         }
                     };
@@ -135,6 +139,10 @@ impl Worker {
                         driver.backend().permission(),
                         last_event.clone(),
                         simulated,
+                    )
+                    .with_quality(
+                        driver.quality().and_then(|quality| quality.ping_ms()),
+                        driver.quality().and_then(|quality| quality.loss_pct()),
                     );
                     let mut current = shared.lock().unwrap_or_else(PoisonError::into_inner);
                     if *current != next {
@@ -185,6 +193,9 @@ fn log_change(before: &Status, after: &Status) {
     }
     if before.permission != after.permission {
         log::info!("Location permission: {:?}", after.permission);
+    }
+    if before.internet != after.internet {
+        log::info!("internet: {:?}", after.internet);
     }
 }
 

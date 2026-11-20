@@ -40,6 +40,8 @@ export type Activity =
 
 export type PermissionState = 'granted' | 'denied' | 'not_determined'
 
+export type InternetState = 'unknown' | 'good' | 'bad' | 'bad_link'
+
 export interface LastEvent {
   time: string
   text: string
@@ -49,6 +51,9 @@ export interface Status {
   connection: Connection
   ssid: string | null
   rssi: number | null
+  ping_ms: number | null
+  loss_pct: number | null
+  internet: InternetState
   managed: boolean
   activity: Activity
   permission: PermissionState

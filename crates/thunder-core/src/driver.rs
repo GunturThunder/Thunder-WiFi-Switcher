@@ -1,15 +1,16 @@
-//! Runs the [`Engine`] against a [`WifiBackend`]: reads a sample, does what
-//! the engine asks (scan, connect), feeds the results back, and repeats until
-//! there's nothing left to do.
+//! Runs the [`Engine`] against a [`WifiBackend`]: reads a sample, checks the
+//! internet quality, does what the engine asks (scan, connect), feeds the
+//! results back, and repeats until there's nothing left to do.
 //!
 //! The app shell calls [`Driver::tick`] every [`crate::rules::SAMPLE_INTERVAL`]
-//! on a worker thread, since scans and connects block. Tests use the same
-//! driver with [`crate::fake::FakeBackend`].
+//! on a worker thread, since scans, connects and probes block. Tests use the
+//! same driver with [`crate::fake::FakeBackend`].
 
 use std::time::Duration;
 
 use crate::config::Config;
-use crate::engine::{Action, Engine, Event, Notice, Sample};
+use crate::engine::{Action, Engine, Event, Notice, Sample, State};
+use crate::quality::{Internet, Prober, Quality, verdict};
 use crate::wifi::{Result, WifiBackend};
 
 /// The engine plus the backend it controls.
@@ -17,6 +18,8 @@ use crate::wifi::{Result, WifiBackend};
 pub struct Driver<B> {
     engine: Engine,
     backend: B,
+    prober: Prober,
+    quality: Option<Quality>,
 }
 
 impl<B: WifiBackend> Driver<B> {
@@ -25,6 +28,8 @@ impl<B: WifiBackend> Driver<B> {
         Self {
             engine: Engine::new(config),
             backend,
+            prober: Prober::new(),
+            quality: None,
         }
     }
 
@@ -38,17 +43,42 @@ impl<B: WifiBackend> Driver<B> {
         &self.backend
     }
 
+    /// The latest internet-quality results, while connected and not paused.
+    pub fn quality(&self) -> Option<&Quality> {
+        self.quality.as_ref()
+    }
+
     /// Applies new settings.
     pub fn set_config(&mut self, config: Config) {
         self.engine.set_config(config);
     }
 
-    /// Reads one sample and acts on it. Returns what the user should be told.
+    /// Reads one sample, checks the internet behind it, and acts on it.
+    /// Returns what the user should be told.
     ///
     /// Fails only if the current link can't be read (for example, Location
     /// permission is missing); the engine doesn't see a sample then.
     pub fn tick(&mut self, now: Duration) -> Result<Vec<Notice>> {
-        let sample = read_sample(&self.backend)?;
+        let mut sample = read_sample(&self.backend)?;
+        let paused = matches!(self.engine.state(), State::Paused(_));
+        match &mut sample {
+            // Checks stop while paused (and, via the worker, while asleep).
+            Sample::Connected(link, internet) if !paused => {
+                let config = self.engine.config();
+                let router = self.backend.gateway().ok().flatten();
+                let targets = config.ping_targets.clone();
+                let (bad_ping, bad_loss) = (config.bad_ping_ms, config.bad_loss_pct);
+                let quality = self
+                    .prober
+                    .probe(&self.backend, &link.ssid, router, &targets);
+                *internet = verdict(&quality, bad_ping, bad_loss);
+                self.quality = Some(quality);
+            }
+            _ => {
+                self.prober.reset();
+                self.quality = None;
+            }
+        }
         Ok(self.handle(now, Event::Sample(sample)))
     }
 
@@ -81,13 +111,14 @@ impl<B: WifiBackend> Driver<B> {
     }
 }
 
-/// Turns what the backend reports into a [`Sample`].
+/// Turns what the backend reports into a [`Sample`]. The internet verdict is
+/// left [`Internet::Unknown`]; [`Driver::tick`] fills it in.
 pub fn read_sample(backend: &impl WifiBackend) -> Result<Sample> {
     if !backend.powered() {
         return Ok(Sample::WifiOff);
     }
     Ok(match backend.current()? {
-        Some(link) => Sample::Connected(link),
+        Some(link) => Sample::Connected(link, Internet::Unknown),
         None => Sample::Disconnected,
     })
 }

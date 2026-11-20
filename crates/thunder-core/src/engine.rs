@@ -10,9 +10,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::config::Config;
+use crate::quality::Internet;
 use crate::rules::{
-    self, AVOID_AFTER_FAILED_CONNECT, Assessment, BACKOFF_MAX, BACKOFF_START,
-    BAD_SAMPLES_BEFORE_SWITCH, COOLDOWN_AFTER_SWITCH, STUCK_TIMEOUT, WAKE_GRACE,
+    self, AVOID_AFTER_BAD_INTERNET, AVOID_AFTER_FAILED_CONNECT, Assessment, BACKOFF_MAX,
+    BACKOFF_START, BAD_SAMPLES_BEFORE_SWITCH, COOLDOWN_AFTER_SWITCH, Requirement, STUCK_TIMEOUT,
+    WAKE_GRACE,
 };
 use crate::wifi::{Error, Link, ScanResult};
 
@@ -23,8 +25,9 @@ pub enum Sample {
     WifiOff,
     /// Wi-Fi is on but not connected to any network.
     Disconnected,
-    /// Connected to this network.
-    Connected(Link),
+    /// Connected to this network, with the latest verdict on its internet
+    /// (see [`crate::quality`]).
+    Connected(Link, Internet),
 }
 
 /// Something that happened, fed into [`Engine::step`].
@@ -102,8 +105,29 @@ pub enum Reason {
     },
     /// The connection dropped.
     Disconnected,
+    /// Signal is fine, but every public server stayed slow or unreachable.
+    BadInternet {
+        /// Best median ping when the search started, if anything answered.
+        ping_ms: Option<u32>,
+        /// Packet loss when the search started.
+        loss_pct: u8,
+    },
+    /// Signal is fine, but the router stayed slow or unreachable.
+    BadLink {
+        /// The router's median ping, if it answered.
+        ping_ms: Option<u32>,
+        /// The router's packet loss.
+        loss_pct: u8,
+    },
     /// The user asked for it.
     User,
+}
+
+impl Reason {
+    /// Bad internet or a bad link: the signal is fine, the connection isn't.
+    pub fn is_quality(&self) -> bool {
+        matches!(self, Self::BadInternet { .. } | Self::BadLink { .. })
+    }
 }
 
 /// Why auto-switching is paused.
@@ -313,8 +337,16 @@ impl Engine {
         let State::Scanning { reason, from, .. } = self.state.clone() else {
             return Action::None;
         };
+        let requirement = match (&reason, &from) {
+            (Reason::WeakSignal { .. }, Some(link)) => Requirement::StrongerThan(link.rssi),
+            // Moving away from bad internet: any network whose signal isn't
+            // weak, as long as it wasn't bad itself in the last 10 minutes.
+            (reason, _) if reason.is_quality() => Requirement::AtLeast(self.config.weak_signal_dbm),
+            _ => Requirement::Any,
+        };
+        let current = from.as_ref().map(|link| link.ssid.as_str());
         let choice = result.ok().and_then(|scan| {
-            rules::choose_network(&scan, &self.config.networks, from.as_ref(), |ssid| {
+            rules::choose_network(&scan, &self.config.networks, current, requirement, |ssid| {
                 self.avoid_until.contains_key(ssid)
             })
         });
@@ -371,7 +403,7 @@ impl Engine {
 
     fn on_user_switch(&mut self, now: Duration, ssid: String) -> Action {
         let from = match &self.last_sample {
-            Some(Sample::Connected(link)) => Some(link.ssid.clone()),
+            Some(Sample::Connected(link, _)) => Some(link.ssid.clone()),
             _ => None,
         };
         if from.as_deref() == Some(ssid.as_str()) {
@@ -390,9 +422,17 @@ impl Engine {
 
     fn start_scan(&mut self, now: Duration, reason: Reason) -> Action {
         let from = match (&reason, &self.last_sample) {
-            (Reason::WeakSignal { .. }, Some(Sample::Connected(link))) => Some(link.clone()),
+            (Reason::Disconnected | Reason::User, _) => None,
+            (_, Some(Sample::Connected(link, _))) => Some(link.clone()),
             _ => None,
         };
+        if reason.is_quality()
+            && let Some(link) = &from
+        {
+            // Don't come back to it (or pick it again) for a while.
+            self.avoid_until
+                .insert(link.ssid.clone(), now + AVOID_AFTER_BAD_INTERNET);
+        }
         self.state = State::Scanning {
             reason,
             from,
@@ -452,12 +492,77 @@ mod tests {
     }
 
     fn connected(ssid: &str, rssi: i32) -> Event {
-        Event::Sample(Sample::Connected(Link {
-            ssid: ssid.into(),
-            bssid: None,
-            rssi,
-            channel: None,
-        }))
+        with_internet(ssid, rssi, Internet::Good)
+    }
+
+    fn with_internet(ssid: &str, rssi: i32, internet: Internet) -> Event {
+        Event::Sample(Sample::Connected(
+            Link {
+                ssid: ssid.into(),
+                bssid: None,
+                rssi,
+                channel: None,
+            },
+            internet,
+        ))
+    }
+
+    const DOWN: Internet = Internet::Bad {
+        ping_ms: None,
+        loss_pct: 100,
+    };
+
+    #[test]
+    fn bad_internet_with_a_strong_signal_starts_a_scan_and_marks_the_network() {
+        let mut engine = Engine::new(config());
+        engine.step(secs(0), with_internet("A", -50, DOWN));
+        engine.step(secs(5), with_internet("A", -50, DOWN));
+        assert_eq!(
+            engine.step(secs(10), with_internet("A", -50, DOWN)),
+            Action::Scan
+        );
+        assert!(matches!(
+            engine.state(),
+            State::Scanning {
+                reason: Reason::BadInternet { loss_pct: 100, .. },
+                ..
+            }
+        ));
+        assert_eq!(engine.avoided().collect::<Vec<_>>(), [("A", secs(610))]);
+    }
+
+    #[test]
+    fn leaving_bad_internet_needs_no_signal_margin_but_not_a_weak_network() {
+        let mut engine = Engine::new(config());
+        for t in [0, 5, 10] {
+            engine.step(secs(t), with_internet("A", -50, DOWN));
+        }
+        // B is much weaker than A, but not weak: good enough.
+        let action = engine.step(
+            secs(12),
+            Event::ScanDone(Ok(vec![seen("A", -50), seen("B", -70)])),
+        );
+        assert_eq!(action, Action::Connect { ssid: "B".into() });
+
+        let mut engine = Engine::new(config());
+        for t in [0, 5, 10] {
+            engine.step(secs(t), with_internet("A", -50, DOWN));
+        }
+        // A weak B isn't worth it.
+        let action = engine.step(secs(12), Event::ScanDone(Ok(vec![seen("B", -80)])));
+        assert_eq!(action, Action::None);
+        assert!(matches!(engine.state(), State::Backoff { .. }));
+    }
+
+    #[test]
+    fn unknown_internet_is_fine() {
+        let mut engine = Engine::new(config());
+        for t in [0, 5, 10, 15] {
+            assert_eq!(
+                engine.step(secs(t), with_internet("A", -50, Internet::Unknown)),
+                Action::None
+            );
+        }
     }
 
     fn seen(ssid: &str, rssi: i32) -> ScanResult {

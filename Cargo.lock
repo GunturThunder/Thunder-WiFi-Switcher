@@ -4865,6 +4865,7 @@ dependencies = [
  "objc2-system-configuration",
  "rpassword",
  "security-framework",
+ "socket2",
  "thunder-core",
 ]
 

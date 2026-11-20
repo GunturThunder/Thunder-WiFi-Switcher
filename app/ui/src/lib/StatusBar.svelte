@@ -29,6 +29,16 @@
     }
   }
 
+  /** Same wording as the menu (status.rs `internet_problem`). */
+  function internetProblem(status: Status): string | null {
+    if (status.internet === 'bad_link') return 'Router not responding'
+    if (status.internet !== 'bad') return null
+    const loss = status.loss_pct ?? 100
+    if (status.ping_ms === null || loss >= 100) return 'No internet'
+    if (loss >= 10) return 'Internet dropping out'
+    return `Slow internet (${status.ping_ms} ms)`
+  }
+
   let status = $derived(app.status)
   let level = $derived(status?.connection === 'connected' && status.rssi !== null ? bars(status.rssi) : -1)
 </script>
@@ -43,6 +53,11 @@
       <span class="detail">
         {#if status.connection === 'connected' && status.rssi !== null}
           {status.rssi} dBm ·
+          {#if internetProblem(status)}
+            <span class="bad">{internetProblem(status)}</span> ·
+          {:else if status.ping_ms !== null}
+            {status.ping_ms} ms ·
+          {/if}
         {/if}
         {activityText[status.activity]}
         {#if status.connection === 'connected' && !status.managed}
@@ -83,6 +98,11 @@
   .detail {
     color: var(--muted);
     font-size: 12px;
+  }
+
+  .bad {
+    color: var(--danger);
+    font-weight: 600;
   }
 
   .chip {

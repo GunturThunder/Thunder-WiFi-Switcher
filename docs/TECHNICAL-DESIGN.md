@@ -74,6 +74,10 @@ pub trait WifiBackend: Send + Sync {
     fn request_permission(&self);
     /// Wi-Fi radio on/off.
     fn powered(&self) -> bool;
+    /// One ICMP echo without admin rights (default: unavailable → TCP fallback).
+    fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> { /* … */ }
+    /// TCP connect to port 443; "refused" counts as an answer (default: std).
+    fn tcp_probe(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> { /* … */ }
 }
 ```
 
@@ -150,7 +154,7 @@ The engine is a state machine with one entry point: `Engine::step(now, event) ->
 | Paused | User turns auto-switch back on | Watching |
 | Paused | Wake from sleep (if the user hadn't paused it) | Cooldown 15 s, so the OS can rejoin a network itself first |
 
-A sample is bad when signal is under the threshold (default -75 dBm; -75 itself is fine). From Phase 4 it is also bad when both public targets show ping over 300 ms or loss over 10%, or the router ping fails.
+A sample is bad when signal is under the threshold (default -75 dBm; -75 itself is fine), or when the quality checks say the router is failing (`BadLink`) or both public targets show ping over 300 ms or loss over 10% (`BadInternet`). A weak signal is checked first, since it explains the rest. Each sample carries the verdict: `Sample::Connected(link, internet)`.
 
 The engine stays hands-off when Wi-Fi is off, when the user has no enabled networks, and when the laptop is on a network that isn't in the user's list or is turned off there (a café, a phone hotspot). Those samples never start a search.
 
@@ -159,7 +163,7 @@ A candidate wins when it is a saved, enabled network in the scan and scores high
 - Each network is judged by its strongest access point in the scan.
 - Signal margin: at least 8 dBm stronger. When disconnected, any candidate will do.
 - A network that failed to connect is skipped for 10 minutes, so a wrong password doesn't block the next-best network.
-- From Phase 4, when the current problem is internet quality, the candidate must be one not marked "bad internet" in the last 10 minutes; its quality is confirmed right after joining, and a failed check marks it and returns to Backoff.
+- When the problem is internet quality (`BadInternet` or `BadLink`), the current network is marked when the search starts and skipped for 10 minutes. Instead of the 8 dB margin, a candidate only needs a signal that isn't weak (at or above the weak-signal level). After joining, its quality is checked like any network: if it's bad too, it gets marked and the search continues; with nothing left, the engine backs off.
 - User priority breaks ties: higher in the list wins when two candidates are within 3 dBm of the strongest.
 
 All of these numbers are constants in `thunder_core::rules`; only the weak-signal level is a user setting.
@@ -170,15 +174,18 @@ Every 5 seconds the prober sends one probe to each of three targets in parallel 
 
 | Target | Method | Timeout |
 | --- | --- | --- |
-| Router (gateway) | ICMP echo | 1 s |
-| 1.1.1.1 | ICMP echo; fallback TCP connect to port 443 | 2 s |
-| 8.8.8.8 | ICMP echo; fallback TCP connect to port 443 | 2 s |
+| Router (gateway) | ICMP echo; fallback TCP connect to port 443 | 1 s each |
+| 1.1.1.1 | ICMP echo; fallback TCP connect to port 443 | 2 s each |
+| 8.8.8.8 | ICMP echo; fallback TCP connect to port 443 | 2 s each |
 
-- Ping = median round-trip time in the window; loss = failed probes ÷ probes sent.
-- ICMP without admin rights: unprivileged datagram ICMP sockets on macOS, `IcmpSendEcho2` on Windows (the `surge-ping` crate covers macOS; Windows gets a small wrapper).
-- If ICMP fails for 3 probes while TCP 443 succeeds, the target switches to TCP mode for that network and stays there until the network changes.
+- `thunder_core::quality::Prober` runs the probes on scoped threads (a tick takes at most about 4 s) and starts a new window whenever the network name changes. The `Driver` calls it on each tick while connected and not paused, and puts the verdict in the sample.
+- Ping = median round-trip time in the window (the upper middle for an even count); loss = failed probes ÷ probes sent. A target is judged only once it has 3 results (15 s), so a just-joined network isn't called bad on its first lost probe.
+- A failed ping is retried right away as a TCP connection to port 443, so networks that drop ICMP don't look lossy. If that happens 3 times, the target switches to TCP for that network and stays there until the network changes. A refused connection counts as an answer.
+- The router counts only if it has answered at least once on this network: some routers ignore ping and have no port 443, and they shouldn't look broken.
+- ICMP without admin rights: an unprivileged datagram ICMP socket on macOS (`socket2`; replies are matched by sequence number and an 8-byte token), `IcmpSendEcho` on Windows. IPv6 targets use the TCP check.
 - Probes stop while the laptop sleeps, Wi-Fi is off, or the engine is paused.
 - Traffic: three tiny packets every 5 s, about 0.1 KB/s.
+- The tray shows the best public median: `-58 · 24ms` next to the icon, `Connected: Dorm-5G · -58 dBm · 24 ms` in the menu, and "no internet", "slow internet" or "router not responding" when the checks say so.
 
 ## Settings and storage
 
