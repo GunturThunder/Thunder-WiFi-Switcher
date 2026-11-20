@@ -24,3 +24,6 @@ Thumbs.db
 .env
 .env.*
 *.log
+
+# Personal notes for Claude Code (shared guidance lives in CLAUDE.md)
+CLAUDE.local.md
