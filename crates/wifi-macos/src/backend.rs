@@ -2,6 +2,8 @@
 
 use std::collections::BTreeSet;
 use std::net::IpAddr;
+use std::thread;
+use std::time::Duration;
 
 use objc2::rc::Retained;
 use objc2_core_wlan::{CWErr, CWInterface, CWNetwork, CWWiFiClient};
@@ -108,8 +110,7 @@ impl WifiBackend for MacBackend {
     fn scan(&self) -> Result<Vec<ScanResult>> {
         let iface = interface()?;
         // SAFETY: blocking scan; this is called off the main thread.
-        let networks =
-            unsafe { iface.scanForNetworksWithName_error(None) }.map_err(|err| map_error(&err))?;
+        let networks = retry_if_busy(|| unsafe { iface.scanForNetworksWithName_error(None) })?;
         let results: Vec<ScanResult> = networks
             .iter()
             .map(|network| scan_result(&network))
@@ -125,8 +126,7 @@ impl WifiBackend for MacBackend {
         let iface = interface()?;
         let name = NSString::from_str(ssid);
         // SAFETY: blocking scan for one network name.
-        let found = unsafe { iface.scanForNetworksWithName_error(Some(&name)) }
-            .map_err(|err| map_error(&err))?;
+        let found = retry_if_busy(|| unsafe { iface.scanForNetworksWithName_error(Some(&name)) })?;
         // The strongest access point with exactly this name.
         let target = found
             .iter()
@@ -137,8 +137,9 @@ impl WifiBackend for MacBackend {
         // No stored password: try without one (open networks).
         let password = self.passwords.get(ssid)?.map(|p| NSString::from_str(&p));
         // SAFETY: blocks until associated or failed; called off the main thread.
-        unsafe { iface.associateToNetwork_password_error(&target, password.as_deref()) }
-            .map_err(|err| map_error(&err))
+        retry_if_busy(|| unsafe {
+            iface.associateToNetwork_password_error(&target, password.as_deref())
+        })
     }
 
     fn known_networks(&self) -> Result<Vec<String>> {
@@ -178,6 +179,37 @@ impl WifiBackend for MacBackend {
         // SAFETY: plain getter.
         interface().is_ok_and(|iface| unsafe { iface.powerOn() })
     }
+}
+
+/// How often to retry a call that macOS answered with "Resource busy".
+const BUSY_RETRIES: u32 = 2;
+/// How long to wait before each retry.
+const BUSY_WAIT: Duration = Duration::from_millis(1500);
+
+/// Runs a CoreWLAN call, retrying when macOS answers "Resource busy". That
+/// happens while macOS is scanning or joining a network by itself, and
+/// clears within a second or two; it isn't a reason to give up on a network.
+fn retry_if_busy<T>(
+    mut call: impl FnMut() -> std::result::Result<T, Retained<NSError>>,
+) -> Result<T> {
+    let mut retries = 0;
+    loop {
+        match call() {
+            Ok(value) => return Ok(value),
+            Err(err)
+                if retries < BUSY_RETRIES && is_busy(&err.domain().to_string(), err.code()) =>
+            {
+                retries += 1;
+                thread::sleep(BUSY_WAIT);
+            }
+            Err(err) => return Err(map_error(&err)),
+        }
+    }
+}
+
+/// `EBUSY` ("Resource busy"), as CoreWLAN reports it.
+fn is_busy(domain: &str, code: isize) -> bool {
+    domain == "NSPOSIXErrorDomain" && code == 16
 }
 
 /// Turns a CoreWLAN error into the core's error type.
@@ -229,6 +261,13 @@ mod tests {
             classify("com.apple.coreWLAN.error", -3925, "x".into()),
             Error::Timeout
         );
+    }
+
+    #[test]
+    fn resource_busy_is_retried_but_other_errors_are_not() {
+        assert!(is_busy("NSPOSIXErrorDomain", 16));
+        assert!(!is_busy("NSPOSIXErrorDomain", 1));
+        assert!(!is_busy("com.apple.coreWLAN.error", 16));
     }
 
     #[test]
