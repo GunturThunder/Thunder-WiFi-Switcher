@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/GunturThunder/Thunder-WiFi-Switcher/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
+  - name: Check the roadmap
+    url: https://github.com/GunturThunder/Thunder-WiFi-Switcher/blob/main/docs/ROADMAP.md
+    about: See what's already planned and when.

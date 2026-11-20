@@ -1,0 +1,100 @@
+name: Network report
+description: The app switched when it shouldn't have, didn't switch when it should, or switched to the wrong network.
+labels: ["core"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Real-world readings are the best way to tune the switching rules. Thank you!
+        You can replace network names with placeholders like "Net-A" and "Net-B" if you prefer.
+  - type: dropdown
+    id: what
+    attributes:
+      label: What went wrong?
+      options:
+        - It switched when it shouldn't have
+        - It didn't switch when it should have
+        - It switched to the wrong network
+        - It kept switching back and forth
+        - It didn't reconnect after Wi-Fi dropped
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include roughly how long the problem lasted and what you were doing (video call, walking between rooms, …).
+    validations:
+      required: true
+  - type: textarea
+    id: networks
+    attributes:
+      label: Networks in range
+      description: For each network, its name (or a placeholder), band, and the signal and ping shown in the menu bar / tray if you saw them.
+      placeholder: |
+        Net-A (5 GHz): -78 dBm, 400 ms  ← connected
+        Net-B (2.4 GHz): -62 dBm
+        Net-C (5 GHz): not in range
+    validations:
+      required: true
+  - type: dropdown
+    id: place
+    attributes:
+      label: Where are you?
+      options:
+        - Dorm
+        - Boarding house (kos) / co-living
+        - Shared house or flat
+        - Home with a router and an extender
+        - Office, café or campus
+        - Somewhere else
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: e.g. macOS 26.1, Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: laptop
+    attributes:
+      label: Laptop model
+      placeholder: e.g. MacBook Air M2, Lenovo ThinkPad T14 (Intel AX211)
+    validations:
+      required: false
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown in Settings → About.
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings you changed
+      description: Anything different from the defaults, e.g. weak signal set to -70 dBm, custom ping targets.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs from around the time it happened
+      description: |
+        macOS: `~/Library/Logs/ThunderWiFi/` · Windows: `%LOCALAPPDATA%\ThunderWiFi\logs\`
+        Logs contain network names, signal and ping only, never passwords.
+      render: text
+    validations:
+      required: false
