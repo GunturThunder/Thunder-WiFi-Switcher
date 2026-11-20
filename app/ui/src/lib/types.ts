@@ -1,0 +1,78 @@
+// Mirrors the Rust types the commands send (app/src-tauri/src/status.rs and
+// thunder_core::Config). Field names stay snake_case, as serde sends them.
+
+export type Language = 'en' | 'id'
+
+export interface Network {
+  ssid: string
+  enabled: boolean
+}
+
+export interface Config {
+  version: number
+  auto_switch: boolean
+  weak_signal_dbm: number
+  bad_ping_ms: number
+  bad_loss_pct: number
+  notify_on_switch: boolean
+  show_signal_label: boolean
+  language: Language
+  ping_targets: string[]
+  networks: Network[]
+}
+
+export type Connection =
+  | 'starting'
+  | 'off'
+  | 'disconnected'
+  | 'connected'
+  | 'permission_needed'
+  | 'unavailable'
+
+export type Activity =
+  | 'watching'
+  | 'scanning'
+  | 'switching'
+  | 'settling'
+  | 'waiting_to_retry'
+  | 'paused'
+  | 'asleep'
+
+export type PermissionState = 'granted' | 'denied' | 'not_determined'
+
+export interface LastEvent {
+  time: string
+  text: string
+}
+
+export interface Status {
+  connection: Connection
+  ssid: string | null
+  rssi: number | null
+  managed: boolean
+  activity: Activity
+  permission: PermissionState
+  last_event: LastEvent | null
+  error: string | null
+  simulated: boolean
+}
+
+export interface AppInfo {
+  version: string
+  platform: string
+  simulated: boolean
+  passwords_editable: boolean
+  config_path: string
+}
+
+export interface Nearby {
+  ssid: string
+  rssi: number
+}
+
+export interface Saved {
+  config: Config
+  notes: string[]
+}
+
+export type Link = 'repo' | 'privacy' | 'issues' | 'location_settings'

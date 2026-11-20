@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getVersion } from '@tauri-apps/api/app'
-  import appIcon from '../../../assets/icons/thunder-wifi-macos.svg'
+
+  import StatusBar from './lib/StatusBar.svelte'
+  import { app } from './lib/store.svelte'
+  import About from './tabs/About.svelte'
+  import General from './tabs/General.svelte'
+  import Networks from './tabs/Networks.svelte'
+  import Rules from './tabs/Rules.svelte'
 
   type TabId = 'networks' | 'rules' | 'general' | 'about'
 
@@ -12,37 +17,10 @@
     { id: 'about', label: 'About' },
   ]
 
-  // What each tab will hold, from docs/TECHNICAL-DESIGN.md. Filled in during Phase 3.
-  const planned: Record<Exclude<TabId, 'about'>, string[]> = {
-    networks: [
-      'Your saved networks, in priority order (drag to reorder)',
-      'Turn each network on or off',
-      'Add and remove networks',
-      'On macOS, a password field for each network',
-    ],
-    rules: [
-      'Weak-signal level (-65 to -80 dBm, default -75)',
-      'Bad ping and packet-loss limits',
-      'Ping targets (default 1.1.1.1 and 8.8.8.8)',
-    ],
-    general: [
-      'Open at login',
-      'Notifications when it switches',
-      'Language (English or Bahasa Indonesia)',
-      'Show signal and ping next to the menu bar icon',
-    ],
-  }
-
   let active = $state<TabId>('networks')
-  let version = $state('')
 
-  onMount(async () => {
-    try {
-      version = await getVersion()
-    } catch {
-      // Running in a plain browser (`npm run dev`) rather than inside Tauri.
-      version = 'dev (browser preview)'
-    }
+  onMount(() => {
+    app.load()
   })
 
   function onTabKeydown(event: KeyboardEvent, index: number) {
@@ -59,6 +37,8 @@
 </script>
 
 <main>
+  <StatusBar />
+
   <div class="tablist" role="tablist" aria-label="Settings sections">
     {#each tabs as tab, index (tab.id)}
       <button
@@ -76,31 +56,27 @@
     {/each}
   </div>
 
-  <div id="panel-{active}" role="tabpanel" aria-labelledby="tab-{active}">
-    {#if active === 'about'}
-      <div class="about">
-        <img src={appIcon} width="96" height="96" alt="" />
-        <h1>Thunder WiFi Switcher</h1>
-        <p class="version">Version {version}</p>
-        <p>Keeps you on the network with the best internet, not just the strongest signal.</p>
-        <p class="muted">
-          Free and open source under the MIT license.<br />
-          github.com/GunturThunder/Thunder-WiFi-Switcher
-        </p>
-      </div>
+  <div id="panel-{active}" class="panel" role="tabpanel" aria-labelledby="tab-{active}">
+    {#if app.notice}
+      <p class="notice">
+        {app.notice}
+        <button type="button" class="link" onclick={() => (app.notice = null)}>Dismiss</button>
+      </p>
+    {/if}
+    {#if active === 'networks'}
+      <Networks />
+    {:else if active === 'rules'}
+      <Rules />
+    {:else if active === 'general'}
+      <General />
     {:else}
-      <div class="placeholder">
-        <p class="badge">Coming in v0.1</p>
-        <h2>{tabs.find((t) => t.id === active)?.label}</h2>
-        <p class="muted">This tab will let you:</p>
-        <ul>
-          {#each planned[active] as item (item)}
-            <li>{item}</li>
-          {/each}
-        </ul>
-      </div>
+      <About />
     {/if}
   </div>
+
+  {#if app.message}
+    <div class="message" class:error={app.message.kind === 'error'} role="status">{app.message.text}</div>
+  {/if}
 </main>
 
 <style>
@@ -114,19 +90,15 @@
     display: flex;
     justify-content: center;
     gap: 4px;
-    padding: 12px 16px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--border);
-    background: var(--surface);
   }
 
   [role='tab'] {
     border: none;
     border-radius: 6px;
-    padding: 6px 14px;
+    padding: 5px 14px;
     background: transparent;
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
   }
 
   [role='tab']:hover {
@@ -138,55 +110,29 @@
     color: var(--on-accent);
   }
 
-  [role='tab']:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  [role='tabpanel'] {
+  .panel {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 28px;
+    padding: 18px 20px 24px;
   }
 
-  h1 {
-    margin: 12px 0 4px;
-    font-size: 20px;
+  .notice {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--warn-bg);
+    color: var(--text);
   }
 
-  h2 {
-    margin: 8px 0;
-    font-size: 18px;
-  }
-
-  ul {
-    margin: 8px 0 0;
-    padding-left: 20px;
-    line-height: 1.7;
-  }
-
-  .about {
-    text-align: center;
-    padding-top: 24px;
-  }
-
-  .version {
-    margin-top: 0;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .muted {
-    color: var(--muted);
-  }
-
-  .badge {
-    display: inline-block;
-    margin: 0;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--hover);
-    color: var(--muted);
+  .message {
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
     font-size: 12px;
+  }
+
+  .message.error {
+    background: var(--danger-bg);
+    color: var(--danger);
   }
 </style>
