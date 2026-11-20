@@ -53,6 +53,20 @@ The app doesn't run on Linux, but `thunder-core` builds and tests there, so you 
 cargo test -p thunder-core
 ```
 
+## Trying the Windows Wi-Fi backend
+
+The `probe` example runs the Windows backend on your real Wi-Fi, without the app (in a terminal, from the repo folder):
+
+```bash
+cargo run -p wifi-windows --example probe -- status           # current network, signal, router, location access
+cargo run -p wifi-windows --example probe -- scan             # networks in range, strongest first
+cargo run -p wifi-windows --example probe -- known            # networks Windows has saved
+cargo run -p wifi-windows --example probe -- connect "Dorm-5G" # join one (it must be saved in Windows first)
+cargo run -p wifi-windows --example probe -- watch            # signal every 5 s; sleep the PC to see sleep/wake
+```
+
+On Windows 11 24H2 and later, Wi-Fi details count as location data. If `status` says location is blocked, run `probe permission` and turn on **Let desktop apps access your location**. The app itself: `cd app`, `npm install`, `npm run tauri dev`.
+
 ## Trying the macOS Wi-Fi backend
 
 `scripts/probe-macos.sh` runs the macOS backend on your real Wi-Fi, without the app. It wraps the `probe` example in a small app bundle (`target/probe/Thunder WiFi Probe.app`), because macOS never shows the Location prompt to a plain command-line tool.

@@ -134,6 +134,12 @@
 <section>
   <h2>Your networks</h2>
   <p class="hint">Higher in the list wins when two networks are about equally strong. Drag to reorder.</p>
+  {#if app.info && !editable}
+    <p class="hint">
+      Windows uses the passwords it has already saved: connect to each network once from the Windows Wi-Fi menu
+      first.
+    </p>
+  {/if}
 
   {#if networks.length === 0}
     <p class="empty">No networks yet.</p>

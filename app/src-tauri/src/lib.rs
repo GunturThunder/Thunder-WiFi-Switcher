@@ -190,7 +190,7 @@ pub fn run() {
             let state = app.state::<AppState>();
             state.refresh_tray(&handle, &state.worker.status());
 
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             watch_sleep(&handle);
 
             if show_settings {
@@ -291,4 +291,27 @@ fn watch_sleep(app: &AppHandle) {
         }
     });
     WATCHER.with(|slot| *slot.borrow_mut() = Some(watcher));
+}
+
+#[cfg(windows)]
+fn watch_sleep(app: &AppHandle) {
+    use std::sync::OnceLock;
+    use wifi_windows::{PowerEvent, PowerWatcher};
+
+    static WATCHER: OnceLock<PowerWatcher> = OnceLock::new();
+    let handle = app.clone();
+    let watcher = PowerWatcher::new(move |event| {
+        if let Some(state) = handle.try_state::<AppState>() {
+            state.worker.send(match event {
+                PowerEvent::Sleep => Command::Sleep,
+                PowerEvent::Wake => Command::Wake,
+            });
+        }
+    });
+    match watcher {
+        Ok(watcher) => {
+            let _ = WATCHER.set(watcher);
+        }
+        Err(err) => log::warn!("{err}; the app won't pause while the PC sleeps"),
+    }
 }

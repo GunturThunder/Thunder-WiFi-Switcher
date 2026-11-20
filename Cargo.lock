@@ -4229,6 +4229,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "thunder-core",
  "wifi-macos",
+ "wifi-windows",
 ]
 
 [[package]]
@@ -4870,6 +4871,10 @@ dependencies = [
 [[package]]
 name = "wifi-windows"
 version = "0.1.0"
+dependencies = [
+ "thunder-core",
+ "windows",
+]
 
 [[package]]
 name = "winapi"

@@ -20,12 +20,12 @@ use crate::status::{LastEvent, Status, notice_text};
 pub enum Command {
     /// Use new settings.
     SetConfig(Config),
-    /// The computer is going to sleep. Only macOS sends this so far; Windows
-    /// gets a power watcher with its backend.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    /// The computer is going to sleep (sent by the macOS and Windows power
+    /// watchers).
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     Sleep,
     /// The computer woke up.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     Wake,
     /// The user picked a network in the menu.
     SwitchTo(String),

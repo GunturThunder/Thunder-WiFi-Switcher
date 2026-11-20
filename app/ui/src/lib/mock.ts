@@ -5,6 +5,9 @@ import type { Api } from './api'
 import type { Config, Status } from './types'
 
 export function createMockApi(): Api {
+  // `?platform=windows` previews the Windows version of the window.
+  const platform = new URLSearchParams(window.location.search).get('platform') ?? 'macos'
+  const windows = platform === 'windows'
   let config: Config = {
     version: 1,
     auto_switch: true,
@@ -26,7 +29,7 @@ export function createMockApi(): Api {
     rssi: -58,
     managed: true,
     activity: 'watching',
-    permission: 'not_determined',
+    permission: windows ? 'denied' : 'not_determined',
     last_event: { time: '15:42', text: 'Switched from Dorm-2.4 to Dorm-5G (signal was -81 dBm)' },
     error: null,
     simulated: false,
@@ -43,10 +46,12 @@ export function createMockApi(): Api {
   return {
     appInfo: async () => ({
       version: 'dev (browser preview)',
-      platform: 'macos',
+      platform,
       simulated: false,
-      passwords_editable: true,
-      config_path: '~/Library/Application Support/ThunderWiFi/config.toml',
+      passwords_editable: !windows,
+      config_path: windows
+        ? '%APPDATA%\\ThunderWiFi\\config.toml'
+        : '~/Library/Application Support/ThunderWiFi/config.toml',
     }),
     getStatus: async () => clone(status),
     getConfig: async () => clone(config),
