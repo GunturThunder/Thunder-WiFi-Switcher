@@ -5,6 +5,7 @@
 //! closed, to keep memory low. Switching logic lives in `thunder-core`; this
 //! crate only wires it to the tray, the settings window and the OS backend.
 
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
@@ -66,9 +67,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
 
-    // Placeholder colour icon until the template (0–3 arcs) icons are made.
     TrayIconBuilder::with_id("main")
-        .icon(tauri::include_image!("icons/tray.png"))
+        .icon(tray_icon())
+        // macOS tints template images to match a light or dark menu bar.
+        .icon_as_template(cfg!(target_os = "macos"))
         .tooltip("Thunder WiFi Switcher")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -78,6 +80,25 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+/// Icon shown in the menu bar or tray.
+///
+/// macOS uses the black template icons from `assets/icons/menubar` (18 pt, drawn
+/// at @2x). Phase 3 switches between the 0–3 arc and "Off" variants to show
+/// signal level; until then it shows full signal.
+///
+/// Windows keeps the colour icon for now: a black icon would disappear on a
+/// dark taskbar, so it needs light and dark variants first.
+fn tray_icon() -> Image<'static> {
+    #[cfg(target_os = "macos")]
+    {
+        tauri::include_image!("../../assets/icons/menubar/ThunderWiFi3Template@2x.png")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        tauri::include_image!("icons/tray.png")
+    }
 }
 
 /// Shows the settings window, creating it if it isn't open.

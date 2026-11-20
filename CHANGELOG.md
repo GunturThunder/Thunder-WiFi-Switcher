@@ -14,3 +14,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - CI on Linux, macOS and Windows: formatting, Clippy, tests, UI checks and an app build.
 - Cargo workspace with `thunder-core`, `wifi-macos` and `wifi-windows` crates (empty for now).
 - Tauri v2 app skeleton: menu bar / tray icon with a basic menu, and an empty settings window.
+- Menu bar template icons (0–3 arcs and disconnected) in `assets/icons/menubar`; the macOS menu bar now uses them.
