@@ -111,18 +111,22 @@ pub trait WifiBackend: Send + Sync {
 
 | Need | API |
 | --- | --- |
-| Session | `WlanOpenHandle`, `WlanEnumInterfaces` |
-| Current link | `WlanQueryInterface(wlan_intf_opcode_current_connection)` |
-| RSSI in dBm | `WlanGetNetworkBssList` → `lRssi` for the connected BSSID |
-| Scan | `WlanScan`, then wait for the `scan_complete` notification (`WlanRegisterNotification`) |
-| Connect | `WlanConnect` with `wlan_connection_mode_profile` and the saved profile name |
+| Session | `WlanOpenHandle` per call, `WlanEnumInterfaces`; uses the connected adapter, else the first |
+| Current link | `WlanQueryInterface(wlan_intf_opcode_current_connection)`; `ERROR_INVALID_STATE` means not connected |
+| RSSI in dBm | `WlanGetNetworkBssList` → `lRssi` for the connected BSSID (0–100 signal quality only as a fallback); channel from `ulChCenterFrequency` |
+| Scan | `WlanScan`, then wait up to 5 s for `scan_complete` / `scan_fail` (`WlanRegisterNotification`); the BSS list is read either way |
+| Connect | Find the network's saved profile in `WlanGetAvailableNetworkList`, `WlanConnect` with `wlan_connection_mode_profile`, wait up to 20 s for `connection_complete` / `connection_attempt_fail`; reason codes from the security module map to `AuthFailed` |
 | Known networks | `WlanGetProfileList` (Windows already stores the passwords) |
-| Gateway | `GetIpForwardTable2` / adapter info from `iphlpapi` |
-| Location permission | Settings → Privacy → Location; on Windows 11 24H2+ SSIDs are hidden without it |
+| Radio on/off | `WlanQueryInterface(wlan_intf_opcode_radio_state)`: on only if both the switch and the setting are on |
+| Gateway | `GetIpForwardTable2(AF_INET)`: the default route of the Wi-Fi adapter's LUID with the lowest metric |
+| Location permission | On Windows 11 24H2+ wlanapi answers `ERROR_ACCESS_DENIED` when location is off for desktop apps → `PermissionDenied`; `request_permission` opens `ms-settings:privacy-location` (desktop apps can't show the prompt themselves) |
+| Sleep / wake | `PowerRegisterSuspendResumeNotification` with a callback (`PowerWatcher`): `PBT_APMSUSPEND` → sleep, `PBT_APMRESUMEAUTOMATIC` → wake |
 | Open at login | Tauri autostart plugin (HKCU Run key) |
 
-- No passwords are stored by the app on Windows; a network must be saved in Windows first.
+- No passwords are stored by the app on Windows; a network must be saved in Windows first. Connecting to one that isn't says so.
 - No admin rights are needed for any call above.
+- `WlanReasonCodeToString` isn't used: the `windows` crate binds its output buffer as read-only, so failures report the reason code instead.
+- `cargo run -p wifi-windows --example probe` exercises every call on real Wi-Fi without the app.
 
 ## Switching engine
 

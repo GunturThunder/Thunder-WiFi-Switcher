@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Windows Wi-Fi backend (`wifi-windows`): reads the current network and signal, scans, joins networks with the profiles Windows has saved, lists them, finds the router, detects when location is off for desktop apps (Windows 11 24H2+), and reports sleep and resume. The app now uses it on Windows.
+- Windows `probe` tool (`cargo run -p wifi-windows --example probe`).
 - The app now runs the switching engine on real Wi-Fi (macOS): menu bar icon with signal level and an optional `-58` label, a menu with status, last switch, auto-switch toggle and "Switch to", and logs in `~/Library/Logs/ThunderWiFi/`.
 - Settings window: add networks from the ones nearby, save their passwords in the Keychain, drag them into priority order, set the weak-signal level, open at login, and a first-run card for Location permission.
 - `--simulate` mode with pretend networks, and `scripts/run-app-macos.sh` to try a debug build on real Wi-Fi.
