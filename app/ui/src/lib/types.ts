@@ -52,6 +52,7 @@ export interface Status {
   ssid: string | null
   rssi: number | null
   ping_ms: number | null
+  loss_pct: number | null
   internet: InternetState
   managed: boolean
   activity: Activity

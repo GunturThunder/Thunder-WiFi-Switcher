@@ -121,6 +121,8 @@ pub struct Status {
     pub rssi: Option<i32>,
     /// Best median ping to the public servers, when connected and checked.
     pub ping_ms: Option<u32>,
+    /// Lowest packet loss to the public servers, when connected and checked.
+    pub loss_pct: Option<u8>,
     /// Whether the internet behind the network works.
     pub internet: InternetState,
     /// Whether the current network is one of the user's (enabled) networks.
@@ -152,6 +154,7 @@ impl Status {
             ssid: None,
             rssi: None,
             ping_ms: None,
+            loss_pct: None,
             internet: InternetState::Unknown,
             managed: false,
             activity: activity(engine.state()),
@@ -180,10 +183,11 @@ impl Status {
         status
     }
 
-    /// Adds the latest ping (ignored unless connected).
-    pub fn with_ping(mut self, ping_ms: Option<u32>) -> Self {
+    /// Adds the latest ping and loss (ignored unless connected).
+    pub fn with_quality(mut self, ping_ms: Option<u32>, loss_pct: Option<u8>) -> Self {
         if self.connection == Connection::Connected {
             self.ping_ms = ping_ms;
+            self.loss_pct = loss_pct;
         }
         self
     }
@@ -193,8 +197,12 @@ impl Status {
         match (self.connection, &self.ssid, self.rssi) {
             (Connection::Connected, Some(ssid), Some(rssi)) => {
                 let quality = match (self.internet, self.ping_ms) {
-                    (InternetState::Bad, None) => " · no internet".to_owned(),
-                    (InternetState::Bad, Some(_)) => " · slow internet".to_owned(),
+                    (InternetState::Bad, ping) => {
+                        format!(
+                            " · {}",
+                            internet_problem(ping, self.loss_pct.unwrap_or(100))
+                        )
+                    }
                     (InternetState::BadLink, _) => " · router not responding".to_owned(),
                     (_, Some(ms)) => format!(" · {ms} ms"),
                     (_, None) => String::new(),
@@ -229,6 +237,30 @@ impl Status {
             (Connection::Connected, Some(rssi)) => Some(signal_bars(rssi)),
             _ => None,
         }
+    }
+}
+
+/// What's wrong with the internet, in plain words: nothing gets through, a
+/// lot gets lost, or it gets through slowly. (The median ping only covers
+/// probes that answered, so a dying connection can still show a low ping.)
+pub fn internet_problem(ping_ms: Option<u32>, loss_pct: u8) -> String {
+    match ping_ms {
+        None => "no internet".to_owned(),
+        Some(_) if loss_pct >= 100 => "no internet".to_owned(),
+        Some(_) if loss_pct >= 10 => "internet dropping out".to_owned(),
+        Some(ms) => format!("slow internet ({ms} ms)"),
+    }
+}
+
+/// Why the app left a network with bad internet, for the switch message.
+fn internet_reason(from: &str, ping_ms: Option<u32>, loss_pct: u8) -> String {
+    match ping_ms {
+        None => format!("no internet on {from}"),
+        Some(_) if loss_pct >= 100 => format!("no internet on {from}"),
+        Some(_) if loss_pct >= 10 => {
+            format!("{from}'s internet kept dropping out: {loss_pct}% of checks failed")
+        }
+        Some(ms) => format!("{from}'s internet was slow: {ms} ms"),
     }
 }
 
@@ -281,12 +313,10 @@ pub fn notice_text(notice: &Notice) -> String {
             from: Some(from),
             to,
             reason: Reason::BadInternet { ping_ms, loss_pct },
-        } => match ping_ms {
-            Some(ms) if *loss_pct < 100 => format!(
-                "Switched from {from} to {to} (internet on {from} was slow: {ms} ms, {loss_pct}% loss)"
-            ),
-            _ => format!("Switched from {from} to {to} (no internet on {from})"),
-        },
+        } => format!(
+            "Switched from {from} to {to} ({})",
+            internet_reason(from, *ping_ms, *loss_pct)
+        ),
         Notice::Switched {
             from: Some(from),
             to,
@@ -331,7 +361,7 @@ mod tests {
 
     #[test]
     fn ping_shows_in_the_menu_and_label() {
-        let status = status(Ok(link("Dorm-5G", -58))).with_ping(Some(24));
+        let status = status(Ok(link("Dorm-5G", -58))).with_quality(Some(24), Some(0));
         assert_eq!(status.summary(), "Connected: Dorm-5G · -58 dBm · 24 ms");
         assert_eq!(status.label().as_deref(), Some("-58 · 24ms"));
         assert_eq!(status.internet, InternetState::Good);
@@ -354,10 +384,21 @@ mod tests {
             ping_ms: Some(900),
             loss_pct: 0,
         };
-        let status = status_of(link_with("Dorm-5G", -50, slow)).with_ping(Some(900));
+        let status = status_of(link_with("Dorm-5G", -50, slow)).with_quality(Some(900), Some(0));
         assert_eq!(
             status.summary(),
-            "Connected: Dorm-5G · -50 dBm · slow internet"
+            "Connected: Dorm-5G · -50 dBm · slow internet (900 ms)"
+        );
+
+        // Just went down: the last answers were quick, but half were lost.
+        let failing = Internet::Bad {
+            ping_ms: Some(24),
+            loss_pct: 50,
+        };
+        let status = status_of(link_with("Dorm-5G", -50, failing)).with_quality(Some(24), Some(50));
+        assert_eq!(
+            status.summary(),
+            "Connected: Dorm-5G · -50 dBm · internet dropping out"
         );
 
         let router = Internet::BadLink {
@@ -377,8 +418,9 @@ mod tests {
 
     #[test]
     fn ping_is_dropped_when_not_connected() {
-        let status = status(Ok(Sample::Disconnected)).with_ping(Some(24));
+        let status = status(Ok(Sample::Disconnected)).with_quality(Some(24), Some(0));
         assert_eq!(status.ping_ms, None);
+        assert_eq!(status.loss_pct, None);
     }
 
     fn status(reading: Result<Sample, Error>) -> Status {
@@ -467,7 +509,17 @@ mod tests {
                     loss_pct: 40
                 }
             )),
-            "Switched from A to B (internet on A was slow: 850 ms, 40% loss)"
+            "Switched from A to B (A's internet kept dropping out: 40% of checks failed)"
+        );
+        assert_eq!(
+            notice_text(&switched(
+                Some("A"),
+                Reason::BadInternet {
+                    ping_ms: Some(900),
+                    loss_pct: 0
+                }
+            )),
+            "Switched from A to B (A's internet was slow: 900 ms)"
         );
         assert_eq!(
             notice_text(&switched(

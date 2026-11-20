@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, bars } from './store.svelte'
-  import type { Activity, InternetState, Status } from './types'
+  import type { Activity, Status } from './types'
 
   const activityText: Record<Activity, string> = {
     watching: 'Watching',
@@ -29,9 +29,14 @@
     }
   }
 
-  const internetText: Partial<Record<InternetState, string>> = {
-    bad: 'No internet',
-    bad_link: 'Router not responding',
+  /** Same wording as the menu (status.rs `internet_problem`). */
+  function internetProblem(status: Status): string | null {
+    if (status.internet === 'bad_link') return 'Router not responding'
+    if (status.internet !== 'bad') return null
+    const loss = status.loss_pct ?? 100
+    if (status.ping_ms === null || loss >= 100) return 'No internet'
+    if (loss >= 10) return 'Internet dropping out'
+    return `Slow internet (${status.ping_ms} ms)`
   }
 
   let status = $derived(app.status)
@@ -48,8 +53,8 @@
       <span class="detail">
         {#if status.connection === 'connected' && status.rssi !== null}
           {status.rssi} dBm ·
-          {#if internetText[status.internet]}
-            <span class="bad">{status.internet === 'bad' && status.ping_ms !== null ? 'Slow internet' : internetText[status.internet]}</span> ·
+          {#if internetProblem(status)}
+            <span class="bad">{internetProblem(status)}</span> ·
           {:else if status.ping_ms !== null}
             {status.ping_ms} ms ·
           {/if}

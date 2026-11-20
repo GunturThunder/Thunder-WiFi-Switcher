@@ -140,7 +140,10 @@ impl Worker {
                         last_event.clone(),
                         simulated,
                     )
-                    .with_ping(driver.quality().and_then(|quality| quality.ping_ms()));
+                    .with_quality(
+                        driver.quality().and_then(|quality| quality.ping_ms()),
+                        driver.quality().and_then(|quality| quality.loss_pct()),
+                    );
                     let mut current = shared.lock().unwrap_or_else(PoisonError::into_inner);
                     if *current != next {
                         log_change(&current, &next);
