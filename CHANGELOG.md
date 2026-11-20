@@ -8,6 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The app now runs the switching engine on real Wi-Fi (macOS): menu bar icon with signal level and an optional `-58` label, a menu with status, last switch, auto-switch toggle and "Switch to", and logs in `~/Library/Logs/ThunderWiFi/`.
+- Settings window: add networks from the ones nearby, save their passwords in the Keychain, drag them into priority order, set the weak-signal level, open at login, and a first-run card for Location permission.
+- `--simulate` mode with pretend networks, and `scripts/run-app-macos.sh` to try a debug build on real Wi-Fi.
 - macOS Wi-Fi backend (`wifi-macos`): reads the current network and signal, scans, joins networks with passwords from the Keychain, lists known networks, finds the router, asks for Location permission, and reports sleep and wake.
 - `probe` tool for trying the macOS backend on real Wi-Fi (`scripts/probe-macos.sh`).
 - Switching engine in `thunder-core`: watches signal every 5 seconds, switches after 15 seconds of weak signal to a saved network at least 8 dB stronger, reconnects straight away when Wi-Fi drops, and backs off from 30 seconds to 5 minutes when nothing better is in range.

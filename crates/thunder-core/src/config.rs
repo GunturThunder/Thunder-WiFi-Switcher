@@ -38,7 +38,11 @@ const HEADER: &str = "\
 ";
 
 /// All user settings.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+///
+/// `Deserialize` is for the settings window, which sends whole settings back;
+/// files go through the more forgiving [`Config::parse`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     /// File format version; see [`CURRENT_VERSION`].
     pub version: u32,
@@ -52,6 +56,8 @@ pub struct Config {
     pub bad_loss_pct: u32,
     /// Show a notification after each switch.
     pub notify_on_switch: bool,
+    /// Show the signal (and later ping) next to the menu bar icon.
+    pub show_signal_label: bool,
     /// Interface language.
     pub language: Language,
     /// Public servers used to check the internet connection.
@@ -133,6 +139,7 @@ impl Default for Config {
             bad_ping_ms: 300,
             bad_loss_pct: 10,
             notify_on_switch: false,
+            show_signal_label: true,
             language: Language::En,
             ping_targets: default_ping_targets(),
             networks: Vec::new(),
@@ -260,6 +267,8 @@ impl Config {
                 .unwrap_or(defaults.bad_loss_pct),
             notify_on_switch: field(&table, "notify_on_switch", &mut notes)
                 .unwrap_or(defaults.notify_on_switch),
+            show_signal_label: field(&table, "show_signal_label", &mut notes)
+                .unwrap_or(defaults.show_signal_label),
             language: field(&table, "language", &mut notes).unwrap_or(defaults.language),
             ping_targets: ping_targets(&table, &mut notes).unwrap_or(defaults.ping_targets),
             networks: networks(&table, &mut notes),
@@ -352,6 +361,7 @@ const KNOWN_KEYS: &[&str] = &[
     "bad_ping_ms",
     "bad_loss_pct",
     "notify_on_switch",
+    "show_signal_label",
     "language",
     "ping_targets",
     "networks",
@@ -469,6 +479,7 @@ enabled = true
         assert_eq!(config.bad_ping_ms, 300);
         assert_eq!(config.bad_loss_pct, 10);
         assert!(!config.notify_on_switch);
+        assert!(config.show_signal_label);
         assert_eq!(config.language, Language::En);
         assert_eq!(
             config.ping_targets,
@@ -505,6 +516,7 @@ enabled = true
             bad_ping_ms: 250,
             bad_loss_pct: 5,
             notify_on_switch: true,
+            show_signal_label: false,
             language: Language::Id,
             ping_targets: vec!["9.9.9.9".parse().unwrap()],
             networks: vec![

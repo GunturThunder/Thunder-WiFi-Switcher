@@ -45,6 +45,12 @@ pub enum Event {
     Sleep,
     /// The laptop woke up.
     Wake,
+    /// The user picked a network (the tray's "Switch to" menu). Works even
+    /// while auto-switch is paused.
+    UserSwitch {
+        /// The network to join.
+        ssid: String,
+    },
 }
 
 /// What the engine wants done next.
@@ -96,6 +102,8 @@ pub enum Reason {
     },
     /// The connection dropped.
     Disconnected,
+    /// The user asked for it.
+    User,
 }
 
 /// Why auto-switching is paused.
@@ -220,6 +228,7 @@ impl Engine {
             Event::Sample(sample) => self.on_sample(now, sample),
             Event::ScanDone(result) => self.on_scan_done(now, result),
             Event::ConnectDone { ssid, result } => self.on_connect_done(now, &ssid, result),
+            Event::UserSwitch { ssid } => self.on_user_switch(now, ssid),
             Event::Sleep => {
                 self.asleep = true;
                 self.update_pause(Some(now));
@@ -341,15 +350,42 @@ impl Engine {
                 self.state = State::Cooldown {
                     until: now + COOLDOWN_AFTER_SWITCH,
                 };
+                // A switch the user asked for while paused stays paused.
+                self.update_pause(None);
                 Action::Notify(Notice::Switched { from, to, reason })
             }
             Err(error) => {
                 self.avoid_until
                     .insert(to.clone(), now + AVOID_AFTER_FAILED_CONNECT);
-                self.enter_backoff(now, reason);
+                if reason == Reason::User {
+                    // The user can simply try again; no need to wait.
+                    self.state = WATCHING;
+                    self.update_pause(None);
+                } else {
+                    self.enter_backoff(now, reason);
+                }
                 Action::Notify(Notice::ConnectFailed { ssid: to, error })
             }
         }
+    }
+
+    fn on_user_switch(&mut self, now: Duration, ssid: String) -> Action {
+        let from = match &self.last_sample {
+            Some(Sample::Connected(link)) => Some(link.ssid.clone()),
+            _ => None,
+        };
+        if from.as_deref() == Some(ssid.as_str()) {
+            return Action::None;
+        }
+        // Takes over from whatever was happening; late scan or connect
+        // results for that are ignored.
+        self.state = State::Switching {
+            to: ssid.clone(),
+            from,
+            reason: Reason::User,
+            since: now,
+        };
+        Action::Connect { ssid }
     }
 
     fn start_scan(&mut self, now: Duration, reason: Reason) -> Action {
@@ -635,6 +671,92 @@ mod tests {
             engine.step(secs(115), Event::Sample(Sample::Disconnected)),
             Action::Scan
         );
+    }
+
+    fn connect_done(ssid: &str, result: Result<(), Error>) -> Event {
+        Event::ConnectDone {
+            ssid: ssid.into(),
+            result,
+        }
+    }
+
+    #[test]
+    fn user_switch_connects_and_cools_down() {
+        let mut engine = Engine::new(config());
+        engine.step(secs(0), connected("A", -60));
+        let action = engine.step(secs(1), Event::UserSwitch { ssid: "B".into() });
+        assert_eq!(action, Action::Connect { ssid: "B".into() });
+        let action = engine.step(secs(3), connect_done("B", Ok(())));
+        assert_eq!(
+            action,
+            Action::Notify(Notice::Switched {
+                from: Some("A".into()),
+                to: "B".into(),
+                reason: Reason::User,
+            })
+        );
+        assert_eq!(engine.state(), &State::Cooldown { until: secs(33) });
+    }
+
+    #[test]
+    fn user_switch_to_the_current_network_does_nothing() {
+        let mut engine = Engine::new(config());
+        engine.step(secs(0), connected("A", -60));
+        assert_eq!(
+            engine.step(secs(1), Event::UserSwitch { ssid: "A".into() }),
+            Action::None
+        );
+    }
+
+    #[test]
+    fn failed_user_switch_goes_back_to_watching_without_backoff() {
+        let mut engine = Engine::new(config());
+        engine.step(secs(0), connected("A", -60));
+        engine.step(secs(1), Event::UserSwitch { ssid: "B".into() });
+        let action = engine.step(secs(2), connect_done("B", Err(Error::AuthFailed)));
+        assert_eq!(
+            action,
+            Action::Notify(Notice::ConnectFailed {
+                ssid: "B".into(),
+                error: Error::AuthFailed,
+            })
+        );
+        assert_eq!(engine.state(), &WATCHING);
+        assert_eq!(engine.avoided().count(), 1);
+    }
+
+    #[test]
+    fn user_switch_works_while_paused_and_stays_paused() {
+        let paused = Config {
+            auto_switch: false,
+            ..config()
+        };
+        let mut engine = Engine::new(paused);
+        engine.step(secs(0), connected("A", -60));
+        assert_eq!(
+            engine.step(secs(1), Event::UserSwitch { ssid: "B".into() }),
+            Action::Connect { ssid: "B".into() }
+        );
+        engine.step(secs(2), connect_done("B", Ok(())));
+        assert_eq!(engine.state(), &State::Paused(PauseReason::User));
+    }
+
+    #[test]
+    fn user_switch_takes_over_from_a_scan() {
+        let mut engine = engine_scanning();
+        engine.step(secs(11), Event::UserSwitch { ssid: "B".into() });
+        // The scan that was running finishes late: ignored.
+        assert_eq!(
+            engine.step(secs(12), Event::ScanDone(Ok(vec![seen("A", -40)]))),
+            Action::None
+        );
+        assert!(matches!(
+            engine.state(),
+            State::Switching {
+                reason: Reason::User,
+                ..
+            }
+        ));
     }
 
     #[test]

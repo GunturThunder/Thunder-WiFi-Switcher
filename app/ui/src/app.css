@@ -6,7 +6,15 @@
   --border: #e3e4e8;
   --hover: #e8eaf0;
   --accent: #3d6bff;
+  --accent-bg: #eef2ff;
+  --accent-border: #c9d6ff;
   --on-accent: #ffffff;
+  --ok: #1a7f37;
+  --ok-bg: #e6f4ea;
+  --warn: #9a6700;
+  --warn-bg: #fff4d6;
+  --danger: #c0262d;
+  --danger-bg: #fdecec;
 
   font-family:
     system-ui,
@@ -14,8 +22,8 @@
     'Segoe UI',
     Roboto,
     sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -30,7 +38,15 @@
     --border: #3a3a40;
     --hover: #34343a;
     --accent: #4d7bff;
+    --accent-bg: #1f2740;
+    --accent-border: #33427a;
     --on-accent: #ffffff;
+    --ok: #4ac26b;
+    --ok-bg: #16301f;
+    --warn: #e3b341;
+    --warn-bg: #3a3017;
+    --danger: #ff7b72;
+    --danger-bg: #3d1d1f;
   }
 }
 
@@ -51,4 +67,100 @@ body {
   user-select: none;
   -webkit-user-select: none;
   cursor: default;
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95em;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+
+button.icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+button.icon.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input:not([type]) {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

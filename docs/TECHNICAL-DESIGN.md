@@ -98,6 +98,7 @@ pub trait WifiBackend: Send + Sync {
 
 - Users add a network and its password once in Settings; macOS gives apps no access to the system's saved Wi-Fi passwords.
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
+- Tauri signs the bundle with the hardened runtime, so `Entitlements.plist` must include `com.apple.security.personal-information.location`; without it macOS silently skips the Location prompt (locationd logs "has supported the hardened runtime but doesn't have the entitlement").
 - Ad-hoc signed builds trigger a Keychain prompt and lose Location permission after each rebuild; Developer ID signing removes both for releases.
 - macOS reports the Location permission state asynchronously, through a location manager on the main thread, so the backend keeps one alive there from startup. Whether names are hidden is judged from what CoreWLAN returns, not from that state.
 - CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`.
@@ -212,16 +213,22 @@ enabled = true
 
 The tray menu is native (Tauri's tray + menu API); only the settings window is a web view, opened on demand and closed to save memory.
 
-**Tray / menu bar icon:** a template (single-colour) Wi-Fi icon with 0–3 arcs for signal level, a slash when disconnected, plus a short label such as `-58 · 24ms` that users can hide.
+**Tray / menu bar icon:** a template (single-colour) Wi-Fi icon with 0–3 arcs for signal level (3 at -60 dBm or better, 2 down to -70, 1 down to -80, 0 below), a slash when disconnected, plus a short label such as `-58` (`-58 · 24ms` once ping arrives) that users can hide. Windows shows the colour icon until it has light and dark variants.
 
 **Tray menu:**
 
-1. Status: `Connected: Dorm-5G · -58 dBm · 24 ms`
-2. Last event: `15:42 – Switched from Dorm-2.4 (signal -81)`
+1. Status: `Connected: Dorm-5G · -58 dBm` (ping joins it in Phase 4)
+2. Last event: `15:42 – Switched from Dorm-2.4 to Dorm-5G (signal was -81 dBm)`
 3. Auto-switch on/off
-4. Switch to → submenu of saved networks with last-seen signal
+4. Switch to → submenu of the user's enabled networks, the current one checked (works even while auto-switch is off)
 5. Settings…
 6. Quit
+
+**Worker thread:** `app/src-tauri/src/worker.rs` owns the `Driver` and is the only thread that touches the Wi-Fi radio. It ticks every 5 s, takes commands (new settings, sleep/wake, "switch to", scan for the settings window), and publishes a `Status` whenever it changes; the shell redraws the tray from it and emits it to the settings window as a `status` event. Sleep and wake come from `SleepWatcher` on the main thread.
+
+**First run:** with no settings file (or no networks), the settings window opens on launch with a "Get started" card: allow Location, then add networks. A settings file that couldn't be read shows a one-time notice.
+
+**Other pieces:** open at login uses the Tauri autostart plugin's Launch Agent; a second launch just opens the settings window (single-instance plugin); logs go to `~/Library/Logs/ThunderWiFi/thunderwifi.log` (rotated at 5 MB, network names and signal only). `--simulate` swaps in the fake backend with three networks on a 6-minute loop and its own settings file.
 
 **Settings window** (about 480 × 560 px), four tabs:
 
@@ -232,7 +239,7 @@ The tray menu is native (Tauri's tray + menu API); only the settings window is a
 | General | Open at login, notifications, language, show signal label |
 | About | Version, check for updates, links to GitHub and privacy note |
 
-The UI is built with Svelte + TypeScript for small bundle size; it talks to Rust through Tauri commands (`get_status`, `get_config`, `save_config`, `switch_to`).
+The UI is built with Svelte + TypeScript for small bundle size; it talks to Rust through Tauri commands (`get_status`, `get_config`, `save_config`, `switch_to`, plus `nearby_networks`, `known_networks`, `password_status`, `set_password`, `delete_password`, `request_permission`, `open_link`, `get_autostart`, `set_autostart`, `app_info`, `startup_notice`) and listens for `status` and `config` events. Every change saves straight away. Passwords only travel from the window to the Keychain, never back. In a plain browser the window uses a pretend backend (`ui/src/lib/mock.ts`).
 
 ## Testing
 

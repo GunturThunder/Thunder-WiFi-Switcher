@@ -72,19 +72,25 @@ Passwords go in your login Keychain under the service `ThunderWiFi`; `scripts/pr
 
 ## Running the app
 
+The app lives in the menu bar (macOS) or system tray (Windows); there's no Dock icon or main window. Choose **Settings…** from its menu to open the settings window.
+
+**With pretend networks** (no real switching, works on any Mac or PC): `--simulate` runs three networks whose signal changes on a 6-minute loop, so you can watch it switch. It keeps its own settings file (`config-simulate.toml`).
+
 ```bash
 cd app
 npm install
-npm run tauri dev
+npm run tauri dev -- -- --simulate --settings
 ```
 
-The app lives in the menu bar (macOS) or system tray (Windows); there's no Dock icon or main window. Choose **Settings…** from its menu to open the settings window. To open it straight away while developing, pass `--settings`:
+**On your real Wi-Fi (macOS):** macOS only gives Location permission, and so network names, to apps opened as a real `.app`, not to `tauri dev`. This builds a debug `.app` and opens it:
 
 ```bash
-npm run tauri dev -- -- --settings
+scripts/run-app-macos.sh
 ```
 
-To work on the settings window in a normal browser (no Tauri features), run `npm run dev` in `app/` and open http://localhost:1420.
+Each rebuild is a new app to macOS, so it asks for Location permission again, and the Keychain may ask to let it read saved passwords (click **Always Allow**). Logs go to `~/Library/Logs/ThunderWiFi/thunderwifi.log`.
+
+**Just the settings window**, in a normal browser with pretend data: run `npm run dev` in `app/` and open http://localhost:1420.
 
 ## Before you open a pull request
 
