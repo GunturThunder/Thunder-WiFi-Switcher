@@ -28,3 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Cargo workspace with `thunder-core`, `wifi-macos` and `wifi-windows` crates (empty for now).
 - Tauri v2 app skeleton: menu bar / tray icon with a basic menu, and an empty settings window.
 - Menu bar template icons (0–3 arcs and disconnected) in `assets/icons/menubar`; the macOS menu bar now uses them.
+
+### Fixed
+
+- Opening the settings window no longer makes macOS ask for your Keychain password once per saved network: the app now checks that a password is saved without reading it.
