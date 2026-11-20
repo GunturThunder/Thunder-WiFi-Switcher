@@ -17,6 +17,15 @@ cp target/debug/examples/probe "$APP/Contents/MacOS/probe"
 cp crates/wifi-macos/examples/probe-Info.plist "$APP/Contents/Info.plist"
 codesign --force --sign - "$APP" >/dev/null 2>&1
 
+case "${1:-}" in
+  save | forget | known)
+    # Keychain-only commands don't need Location permission. Run them right
+    # here: an app launched with `open` has no terminal of its own, so the
+    # hidden password prompt couldn't read what you type.
+    exec "$APP/Contents/MacOS/probe" "$@"
+    ;;
+esac
+
 if ! TTY=$(tty 2>/dev/null); then
   # No terminal (for example in CI): run the binary directly. It works, but
   # macOS won't grant it Location permission this way.
