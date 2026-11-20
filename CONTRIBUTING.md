@@ -66,6 +66,8 @@ scripts/probe-macos.sh connect "Dorm-5G"  # join it
 scripts/probe-macos.sh watch              # signal every 5 s; close the lid to see sleep/wake
 ```
 
+macOS ties the permission to this exact build, so after the probe is rebuilt (for example after pulling new code) run `permission` again. Until it has been granted for the current build, `status` reports "not asked yet" and `scan` reports that permission is needed.
+
 Passwords go in your login Keychain under the service `ThunderWiFi`; `scripts/probe-macos.sh forget "<name>"` removes one. The Keychain test is skipped by default because it writes to your Keychain (under `ThunderWiFi-test`, and cleans up): run it with `cargo test -p wifi-macos -- --ignored`.
 
 ## Running the app

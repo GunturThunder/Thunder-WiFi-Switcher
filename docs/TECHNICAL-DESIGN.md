@@ -98,7 +98,8 @@ pub trait WifiBackend: Send + Sync {
 
 - Users add a network and its password once in Settings; macOS gives apps no access to the system's saved Wi-Fi passwords.
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
-- Ad-hoc signed builds trigger a Keychain prompt after each rebuild; Developer ID signing removes it for releases.
+- Ad-hoc signed builds trigger a Keychain prompt and lose Location permission after each rebuild; Developer ID signing removes both for releases.
+- macOS reports the Location permission state asynchronously, through a location manager on the main thread, so the backend keeps one alive there from startup. Whether names are hidden is judged from what CoreWLAN returns, not from that state.
 - CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`.
 - macOS only shows the Location prompt to processes launched as apps. A binary started from Terminal (including `tauri dev`) is never asked, so real-Wi-Fi testing needs a bundled build opened with `open`.
 - `scripts/probe-macos.sh` exercises every backend call on real Wi-Fi without the app: it wraps the `probe` example in a small app bundle and launches it with `open`, with the terminal as its input and output.

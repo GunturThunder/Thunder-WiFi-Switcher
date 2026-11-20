@@ -27,4 +27,7 @@ fi
 # output. Ctrl-C stops the probe as well as this script.
 stop_probe() { pkill -f "$APP/Contents/MacOS/probe" 2>/dev/null || true; }
 trap stop_probe INT TERM
-open -W -n --stdin "$TTY" --stdout "$TTY" --stderr "$TTY" "$APP" --args "$@"
+# (open prints "Unable to block on application" when the probe finishes
+# before it can wait on it; that's harmless, so it's filtered out.)
+open -W -n --stdin "$TTY" --stdout "$TTY" --stderr "$TTY" "$APP" --args "$@" \
+  2> >(grep -v "Unable to block on application" >&2)

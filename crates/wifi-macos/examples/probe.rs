@@ -53,6 +53,11 @@ usage: scripts/probe-macos.sh <command>
         let args: Vec<String> = std::env::args().skip(1).collect();
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let wifi = MacBackend::new();
+        // Let macOS tell the new location manager the permission state.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while wifi.permission() == Permission::NotDetermined && Instant::now() < deadline {
+            pump(Duration::from_millis(100));
+        }
         let result = match args.as_slice() {
             [] | ["status"] => status(&wifi),
             ["permission"] => permission(&wifi),

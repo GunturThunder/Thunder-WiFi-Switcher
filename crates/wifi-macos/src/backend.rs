@@ -11,21 +11,33 @@ use thunder_core::{Error, Link, Permission, Result, ScanResult, WifiBackend};
 use crate::keychain::PasswordStore;
 use crate::{gateway, location};
 
-/// The macOS backend. Cheap to create and share: it holds no CoreWLAN
-/// objects, it asks for the Wi-Fi interface on each call.
-#[derive(Debug, Clone, Default)]
+/// The macOS backend. Cheap to share: it holds no CoreWLAN objects, it asks
+/// for the Wi-Fi interface on each call.
+///
+/// Creating one starts a location manager on the main thread. macOS reports
+/// the Location permission state through it, so
+/// [`permission`](WifiBackend::permission) reads "not determined" until the
+/// main run loop has run for a moment.
+#[derive(Debug, Clone)]
 pub struct MacBackend {
     passwords: PasswordStore,
+}
+
+impl Default for MacBackend {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MacBackend {
     /// A backend that reads passwords from the `ThunderWiFi` Keychain service.
     pub fn new() -> Self {
-        Self::default()
+        Self::with_passwords(PasswordStore::default())
     }
 
     /// A backend with a different password store (for tests).
     pub fn with_passwords(passwords: PasswordStore) -> Self {
+        location::start();
         Self { passwords }
     }
 
@@ -79,13 +91,14 @@ impl WifiBackend for MacBackend {
         if rssi == 0 {
             return Ok(None);
         }
-        if ssid.is_none() && location::status() != Permission::Granted {
-            // Connected, but macOS hides the name without Location permission.
+        // Connected but nameless: macOS hides names without Location
+        // permission. (Judged from what CoreWLAN returns rather than the
+        // permission status, which macOS reports late.)
+        let Some(ssid) = ssid else {
             return Err(Error::PermissionDenied);
-        }
+        };
         Ok(Some(Link {
-            // A hidden network with permission granted: no name to report.
-            ssid: ssid.unwrap_or_default(),
+            ssid,
             bssid,
             rssi,
             channel,
@@ -93,18 +106,19 @@ impl WifiBackend for MacBackend {
     }
 
     fn scan(&self) -> Result<Vec<ScanResult>> {
-        if location::status() != Permission::Granted {
-            // Scans still work, but every network comes back without a name.
-            return Err(Error::PermissionDenied);
-        }
         let iface = interface()?;
         // SAFETY: blocking scan; this is called off the main thread.
         let networks =
             unsafe { iface.scanForNetworksWithName_error(None) }.map_err(|err| map_error(&err))?;
-        Ok(networks
+        let results: Vec<ScanResult> = networks
             .iter()
             .map(|network| scan_result(&network))
-            .collect())
+            .collect();
+        // Without permission the scan still works, but every name is missing.
+        if !results.is_empty() && results.iter().all(|r| r.ssid.is_empty()) {
+            return Err(Error::PermissionDenied);
+        }
+        Ok(results)
     }
 
     fn connect(&self, ssid: &str) -> Result<()> {
