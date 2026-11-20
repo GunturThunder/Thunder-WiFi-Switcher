@@ -78,7 +78,11 @@ pub fn real() -> (Arc<dyn WifiBackend>, Passwords) {
         let passwords = Passwords::Keychain(backend.passwords().clone());
         (Arc::new(backend), passwords)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        (Arc::new(wifi_windows::WinBackend::new()), Passwords::Os)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         (Arc::new(Unsupported), Passwords::Os)
     }
@@ -89,12 +93,12 @@ pub fn simulated(fake: Arc<FakeBackend>) -> (Arc<dyn WifiBackend>, Passwords) {
     (fake, Passwords::Memory(Mutex::new(HashSet::new())))
 }
 
-/// Stand-in until the Windows backend exists: reports that Wi-Fi can't be
-/// read, so the app runs but never switches.
-#[cfg(not(target_os = "macos"))]
+/// Stand-in for platforms without a backend (Linux): reports that Wi-Fi
+/// can't be read, so the app runs but never switches.
+#[cfg(not(any(target_os = "macos", windows)))]
 struct Unsupported;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 impl WifiBackend for Unsupported {
     fn current(&self) -> thunder_core::Result<Option<thunder_core::Link>> {
         Err(unsupported())
@@ -120,7 +124,7 @@ impl WifiBackend for Unsupported {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn unsupported() -> Error {
-    Error::Os("Windows support is coming in v0.5 (try --simulate)".into())
+    Error::Os("Wi-Fi switching only works on macOS and Windows (try --simulate)".into())
 }

@@ -9,9 +9,11 @@
   let noPrompt = $state(false)
 
   let permission = $derived(app.status?.permission ?? 'granted')
+  let isMac = $derived(app.info?.platform === 'macos')
+  // macOS asks each app; Windows 11 24H2+ has one switch for all desktop apps,
+  // and the app only learns it's off when Wi-Fi details come back blocked.
   let needsPermission = $derived(
-    app.info?.platform === 'macos' &&
-      (permission !== 'granted' || app.status?.connection === 'permission_needed'),
+    permission !== 'granted' || app.status?.connection === 'permission_needed',
   )
   let needsNetworks = $derived((app.config?.networks.length ?? 0) === 0)
 
@@ -34,7 +36,22 @@
 
 {#if needsPermission || needsNetworks}
   <section class="card" aria-label="Get started">
-    {#if needsPermission}
+    {#if needsPermission && !isMac}
+      <div class="step">
+        <span class="number" aria-hidden="true">1</span>
+        <div>
+          <h2>Turn on location for desktop apps</h2>
+          <p>
+            Windows treats Wi-Fi details as location data. Turn on "Let desktop apps access your location" so the
+            app can see your networks. It never reads or stores your location.
+          </p>
+          <button type="button" class="primary" onclick={() => api.openLink('location_settings')}>
+            Open Location settings
+          </button>
+          <button type="button" class="link" onclick={() => api.openLink('privacy')}>Why?</button>
+        </div>
+      </div>
+    {:else if needsPermission}
       <div class="step">
         <span class="number" aria-hidden="true">1</span>
         <div>
