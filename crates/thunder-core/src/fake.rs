@@ -15,9 +15,10 @@
 //! assert_eq!(wifi.current().unwrap().unwrap().rssi, -62);
 //! ```
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use crate::wifi::{Error, Link, Permission, Result, ScanResult, WifiBackend};
 
@@ -47,7 +48,20 @@ struct FakeState {
     gateway: IpAddr,
     failures: HashMap<String, Error>,
     calls: Vec<Call>,
+    /// Per network: public-server ping (`None` = internet down).
+    internet: HashMap<String, Option<u32>>,
+    /// Per network: router ping (`None` = router silent).
+    router: HashMap<String, Option<u32>>,
+    /// Networks that drop ping (ICMP) but allow TCP.
+    icmp_blocked: HashSet<String>,
+    /// Public servers that are down everywhere.
+    servers_down: HashSet<IpAddr>,
 }
+
+/// Ping on a network whose internet works, unless set otherwise.
+const DEFAULT_PING_MS: u32 = 20;
+/// Router ping, unless set otherwise.
+const DEFAULT_ROUTER_MS: u32 = 3;
 
 impl Default for FakeBackend {
     fn default() -> Self {
@@ -68,6 +82,10 @@ impl FakeBackend {
                 gateway: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
                 failures: HashMap::new(),
                 calls: Vec::new(),
+                internet: HashMap::new(),
+                router: HashMap::new(),
+                icmp_blocked: HashSet::new(),
+                servers_down: HashSet::new(),
             }),
         }
     }
@@ -150,6 +168,61 @@ impl FakeBackend {
     pub fn calls(&self) -> Vec<Call> {
         self.state().calls.clone()
     }
+
+    /// Sets the ping to public servers on a network; `None` means its
+    /// internet is down. Defaults to 20 ms.
+    pub fn set_internet(&self, ssid: &str, ping_ms: Option<u32>) {
+        self.state().internet.insert(ssid.to_owned(), ping_ms);
+    }
+
+    /// Sets the router's ping on a network; `None` means it doesn't answer.
+    /// Defaults to 3 ms.
+    pub fn set_router(&self, ssid: &str, ping_ms: Option<u32>) {
+        self.state().router.insert(ssid.to_owned(), ping_ms);
+    }
+
+    /// Makes a network drop ping (ICMP) while TCP still works.
+    pub fn block_icmp(&self, ssid: &str) {
+        self.state().icmp_blocked.insert(ssid.to_owned());
+    }
+
+    /// Takes one public server down (or back up) on every network.
+    pub fn set_server_down(&self, addr: IpAddr, down: bool) {
+        let mut state = self.state();
+        if down {
+            state.servers_down.insert(addr);
+        } else {
+            state.servers_down.remove(&addr);
+        }
+    }
+
+    /// The simulated round trip to `addr` on the current network.
+    fn round_trip(&self, addr: IpAddr, icmp: bool) -> Result<Duration> {
+        let state = self.state();
+        let Some(ssid) = state.connected.clone() else {
+            return Err(Error::Os("not connected".into()));
+        };
+        if icmp && state.icmp_blocked.contains(&ssid) {
+            return Err(Error::Timeout);
+        }
+        let ping = if addr == state.gateway {
+            state
+                .router
+                .get(&ssid)
+                .copied()
+                .unwrap_or(Some(DEFAULT_ROUTER_MS))
+        } else if state.servers_down.contains(&addr) {
+            None
+        } else {
+            state
+                .internet
+                .get(&ssid)
+                .copied()
+                .unwrap_or(Some(DEFAULT_PING_MS))
+        };
+        ping.map(|ms| Duration::from_millis(ms.into()))
+            .ok_or(Error::Timeout)
+    }
 }
 
 impl WifiBackend for FakeBackend {
@@ -223,6 +296,14 @@ impl WifiBackend for FakeBackend {
 
     fn powered(&self) -> bool {
         self.state().powered
+    }
+
+    fn ping(&self, addr: IpAddr, _timeout: Duration) -> Result<Duration> {
+        self.round_trip(addr, true)
+    }
+
+    fn tcp_probe(&self, addr: IpAddr, _timeout: Duration) -> Result<Duration> {
+        self.round_trip(addr, false)
     }
 }
 
