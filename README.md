@@ -76,9 +76,8 @@ Both macOS and Windows hide Wi-Fi network names from apps that don't have Locati
 You need Rust and Node.js; see [CONTRIBUTING.md](CONTRIBUTING.md) for the full setup on each OS.
 
 ```bash
-cd app
-npm install
-npm run tauri dev
+scripts/run-app-macos.sh              # real Wi-Fi (macOS)
+scripts/run-app-macos.sh --simulate   # pretend networks
 ```
 
 ## Roadmap
