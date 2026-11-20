@@ -5,6 +5,8 @@
   import { app } from './store.svelte'
 
   let asking = $state(false)
+  // Set when the user asked but no answer came: offer System Settings instead.
+  let noPrompt = $state(false)
 
   let permission = $derived(app.status?.permission ?? 'granted')
   let needsPermission = $derived(
@@ -15,11 +17,17 @@
 
   async function allow() {
     asking = true
+    noPrompt = false
     try {
       await api.requestPermission()
+    } catch (err) {
+      app.flash('error', `Couldn't ask for Location permission: ${err}`)
     } finally {
-      // The answer arrives with the next status update.
-      setTimeout(() => (asking = false), 4000)
+      // The answer arrives with a later status update (every 5 seconds).
+      setTimeout(() => {
+        asking = false
+        noPrompt = app.status?.permission !== 'granted'
+      }, 8000)
     }
   }
 </script>
@@ -46,6 +54,14 @@
             </button>
           {/if}
           <button type="button" class="link" onclick={() => api.openLink('privacy')}>Why?</button>
+          {#if noPrompt && permission !== 'denied'}
+            <p class="fallback">
+              Didn't see a prompt? Turn on Thunder WiFi Switcher in
+              <button type="button" class="link" onclick={() => api.openLink('location_settings')}>
+                Location Services settings
+              </button>.
+            </p>
+          {/if}
         </div>
       </div>
     {/if}
@@ -99,5 +115,9 @@
   p {
     margin: 0 0 8px;
     color: var(--muted);
+  }
+
+  .fallback {
+    margin: 8px 0 0;
   }
 </style>
