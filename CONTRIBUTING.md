@@ -53,6 +53,23 @@ The app doesn't run on Linux, but `thunder-core` builds and tests there, so you 
 cargo test -p thunder-core
 ```
 
+## Trying the macOS Wi-Fi backend
+
+`scripts/probe-macos.sh` runs the macOS backend on your real Wi-Fi, without the app. It wraps the `probe` example in a small app bundle (`target/probe/Thunder WiFi Probe.app`), because macOS never shows the Location prompt to a plain command-line tool.
+
+```bash
+scripts/probe-macos.sh permission         # answer the Location prompt once
+scripts/probe-macos.sh status             # current network, signal, router
+scripts/probe-macos.sh scan               # networks in range, strongest first
+scripts/probe-macos.sh save "Dorm-5G"     # store a password (asks for it)
+scripts/probe-macos.sh connect "Dorm-5G"  # join it
+scripts/probe-macos.sh watch              # signal every 5 s; close the lid to see sleep/wake
+```
+
+macOS ties the permission to this exact build, so after the probe is rebuilt (for example after pulling new code) run `permission` again. Until it has been granted for the current build, `status` reports "not asked yet" and `scan` reports that permission is needed.
+
+Passwords go in your login Keychain under the service `ThunderWiFi`; `scripts/probe-macos.sh forget "<name>"` removes one. The Keychain test is skipped by default because it writes to your Keychain (under `ThunderWiFi-test`, and cleans up): run it with `cargo test -p wifi-macos -- --ignored`.
+
 ## Running the app
 
 ```bash
