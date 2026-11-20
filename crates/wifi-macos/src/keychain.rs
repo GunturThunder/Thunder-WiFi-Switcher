@@ -58,9 +58,23 @@ impl PasswordStore {
         }
     }
 
-    /// Whether a password is saved for this network.
+    /// Whether a password is saved for this network. Only looks at the item's
+    /// attributes: reading the password itself would make macOS ask the user
+    /// for permission (once per item, after every rebuild of an ad-hoc-signed
+    /// app) just to show "Password saved".
     pub fn contains(&self, ssid: &str) -> Result<bool> {
-        Ok(self.get(ssid)?.is_some())
+        let found = ItemSearchOptions::new()
+            .class(ItemClass::generic_password())
+            .service(&self.service)
+            .account(ssid)
+            .load_attributes(true)
+            .limit(1)
+            .search();
+        match found {
+            Ok(items) => Ok(!items.is_empty()),
+            Err(err) if err.code() == NOT_FOUND => Ok(false),
+            Err(err) => Err(keychain_error(err)),
+        }
     }
 
     /// The saved password, read only when connecting.
