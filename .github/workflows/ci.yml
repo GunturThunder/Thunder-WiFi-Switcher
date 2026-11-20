@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The core crates and the settings window build anywhere, so check them on Linux.
+  # The app crate itself only targets macOS and Windows.
+  linux:
+    name: Core and UI (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy (core crates)
+        run: cargo clippy --workspace --exclude thunder-wifi-switcher --all-targets -- -D warnings
+
+      - name: Test (core crates)
+        run: cargo test --workspace --exclude thunder-wifi-switcher
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Type-check UI
+        working-directory: app
+        run: npm run check
+
+      - name: Build UI
+        working-directory: app
+        run: npm run build
+
+  app:
+    name: App (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Clippy (whole workspace)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test (whole workspace)
+        run: cargo test --workspace
+
+      # Builds the UI and the app binary in production mode, without installers.
+      # Signed installers come from release.yml (Phase 5).
+      - name: Build app
+        working-directory: app
+        run: npm run tauri -- build --debug --no-bundle --ci

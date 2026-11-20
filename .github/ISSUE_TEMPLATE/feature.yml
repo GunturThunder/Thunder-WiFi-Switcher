@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an idea or an improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you start, check the [PRD](https://github.com/GunturThunder/Thunder-WiFi-Switcher/blob/main/docs/PRD.md): some features (Linux, VPN switching, captive portal login, speed tests and more) are deliberately out of scope for v1.0. You're still welcome to ask for them; we'll look at them after v1.0.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation, e.g. "In my kos there are two networks with the same name and …"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like the app to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything else you've tried or considered?
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: Which platform is this for?
+      multiple: true
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
