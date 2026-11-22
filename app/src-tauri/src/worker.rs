@@ -12,9 +12,11 @@ use std::time::{Duration, Instant};
 
 use thunder_core::driver::read_sample;
 use thunder_core::rules::SAMPLE_INTERVAL;
-use thunder_core::{Config, Driver, Error, Event, Notice, Sample, ScanResult, WifiBackend};
+use thunder_core::{
+    Config, Driver, Error, Event, Notice, Quality, Sample, ScanResult, WifiBackend,
+};
 
-use crate::status::{LastEvent, Status, notice_text};
+use crate::status::{InternetState, LastEvent, Status, notice_text};
 
 /// Something for the worker to do.
 pub enum Command {
@@ -146,7 +148,7 @@ impl Worker {
                     );
                     let mut current = shared.lock().unwrap_or_else(PoisonError::into_inner);
                     if *current != next {
-                        log_change(&current, &next);
+                        log_change(&current, &next, driver.quality());
                         *current = next.clone();
                         drop(current);
                         on_status(&next);
@@ -183,8 +185,9 @@ impl Worker {
     }
 }
 
-/// Logs connection and activity changes (not every signal reading).
-fn log_change(before: &Status, after: &Status) {
+/// Logs connection and activity changes (not every signal reading). When the
+/// internet turns bad, also logs what each server did, for network reports.
+fn log_change(before: &Status, after: &Status, quality: Option<&Quality>) {
     if before.connection != after.connection || before.ssid != after.ssid {
         log::info!("{}", after.summary());
     }
@@ -195,7 +198,12 @@ fn log_change(before: &Status, after: &Status) {
         log::info!("Location permission: {:?}", after.permission);
     }
     if before.internet != after.internet {
-        log::info!("internet: {:?}", after.internet);
+        match (after.internet, quality) {
+            (InternetState::Bad | InternetState::BadLink, Some(quality)) => {
+                log::info!("internet: {:?} ({})", after.internet, quality.describe());
+            }
+            _ => log::info!("internet: {:?}", after.internet),
+        }
     }
 }
 
