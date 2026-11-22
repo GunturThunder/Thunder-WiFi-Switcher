@@ -15,10 +15,12 @@ mod paths;
 mod simulate;
 mod status;
 mod tray;
+mod updates;
 mod window;
 mod worker;
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -27,8 +29,11 @@ use tauri_plugin_notification::NotificationExt as _;
 use thunder_core::{Config, Engine, Origin, WifiBackend};
 
 use crate::backend::Passwords;
-use crate::status::{Alert, Status};
-use crate::tray::{MENU_AUTO_SWITCH, MENU_QUIT, MENU_SETTINGS, MENU_SWITCH_PREFIX, Tray};
+use crate::status::{Alert, Connection, Status};
+use crate::tray::{
+    MENU_AUTO_SWITCH, MENU_QUIT, MENU_SETTINGS, MENU_SWITCH_PREFIX, MENU_UPDATE, Tray,
+};
+use crate::updates::Updates;
 use crate::worker::{Command, Worker};
 
 /// Everything the commands and menu need, shared by the whole app.
@@ -40,6 +45,7 @@ pub struct AppState {
     backend: Arc<dyn WifiBackend>,
     passwords: Passwords,
     tray: Tray,
+    updates: Updates,
     simulated: bool,
 }
 
@@ -122,6 +128,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -137,6 +144,9 @@ pub fn run() {
             commands::request_permission,
             commands::notification_permission,
             commands::ask_notification_permission,
+            commands::update_status,
+            commands::check_for_updates,
+            commands::install_update,
             commands::open_link,
             commands::get_autostart,
             commands::set_autostart,
@@ -184,6 +194,9 @@ pub fn run() {
 
             let status_handle = handle.clone();
             let alert_handle = handle.clone();
+            // Location went missing (macOS forgets it after each update of an
+            // unsigned app): open the window once, where the setup guide waits.
+            let opened_for_permission = AtomicBool::new(false);
             let worker = Worker::spawn(
                 config.clone(),
                 Arc::clone(&backend),
@@ -193,6 +206,13 @@ pub fn run() {
                         state.refresh_tray(&status_handle, status);
                     }
                     let _ = status_handle.emit("status", status);
+                    if status.connection == Connection::PermissionNeeded
+                        && !opened_for_permission.swap(true, Ordering::Relaxed)
+                    {
+                        let app = status_handle.clone();
+                        let _ =
+                            status_handle.run_on_main_thread(move || window::open_settings(&app));
+                    }
                 },
                 move |alert| notify(&alert_handle, alert),
             );
@@ -207,6 +227,7 @@ pub fn run() {
                 backend,
                 passwords,
                 tray,
+                updates: Updates::default(),
                 simulated: simulate,
             });
             // The worker may have published before the state existed.
@@ -215,6 +236,7 @@ pub fn run() {
 
             #[cfg(any(target_os = "macos", windows))]
             watch_sleep(&handle);
+            updates::start(&handle);
 
             if show_settings {
                 window::open_settings(&handle);
@@ -273,6 +295,11 @@ fn on_menu(app: &AppHandle, id: &str) {
     match id {
         MENU_SETTINGS => window::open_settings(app),
         MENU_QUIT => app.exit(0),
+        MENU_UPDATE => {
+            if let Err(err) = updates::install_and_restart(app) {
+                log::warn!("{err}");
+            }
+        }
         MENU_AUTO_SWITCH => {
             let mut config = state.config().clone();
             config.auto_switch = !config.auto_switch;

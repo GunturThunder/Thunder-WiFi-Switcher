@@ -9,6 +9,7 @@ use tauri_plugin_opener::OpenerExt as _;
 use thunder_core::{Config, Error};
 
 use crate::status::{JoinError, Status};
+use crate::updates::{self, UpdateStatus};
 use crate::{AppState, apply_config};
 
 type CommandResult<T> = Result<T, String>;
@@ -143,6 +144,23 @@ pub async fn delete_password(state: State<'_, AppState>, ssid: String) -> Comman
 #[tauri::command]
 pub fn request_permission(state: State<'_, AppState>) {
     state.backend.request_permission();
+}
+
+#[tauri::command]
+pub fn update_status(state: State<'_, AppState>) -> UpdateStatus {
+    state.updates.status()
+}
+
+/// Looks for a new version now (About → Check for updates) and downloads it.
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> UpdateStatus {
+    updates::check(&app).await
+}
+
+/// Installs the downloaded update and restarts the app.
+#[tauri::command]
+pub fn install_update(app: AppHandle) -> CommandResult<()> {
+    updates::install_and_restart(&app)
 }
 
 /// Whether the system shows the app's notifications. Only macOS can tell;

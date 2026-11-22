@@ -31,6 +31,18 @@
       "minimumSystemVersion": "14.0",
       "signingIdentity": "-",
       "entitlements": "Entitlements.plist"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI4M0M3OURFNzI5MDg4NkYKUldSdmlKQnkzbms4S0dRODRraFkySStyaTRTMllDZHV2NHp1NERTaWV6dTN3aGI1T3N0WVlacjUK",
+      "endpoints": [
+        "https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
