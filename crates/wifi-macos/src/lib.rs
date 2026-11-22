@@ -21,8 +21,12 @@ mod gateway;
 mod icmp;
 mod keychain;
 mod location;
+mod notifications;
 mod power;
 
 pub use backend::MacBackend;
 pub use keychain::PasswordStore;
+pub use notifications::{
+    NotificationPermission, ask_notification_permission, notification_permission,
+};
 pub use power::{PowerEvent, SleepWatcher};
