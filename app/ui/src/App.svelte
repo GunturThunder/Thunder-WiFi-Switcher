@@ -2,13 +2,11 @@
   import { onMount } from 'svelte'
 
   import StatusBar from './lib/StatusBar.svelte'
-  import { app } from './lib/store.svelte'
+  import { app, type TabId } from './lib/store.svelte'
   import About from './tabs/About.svelte'
   import General from './tabs/General.svelte'
   import Networks from './tabs/Networks.svelte'
   import Rules from './tabs/Rules.svelte'
-
-  type TabId = 'networks' | 'rules' | 'general' | 'about'
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'networks', label: 'Networks' },
@@ -17,10 +15,14 @@
     { id: 'about', label: 'About' },
   ]
 
-  let active = $state<TabId>('networks')
-
   onMount(() => {
     app.load()
+  })
+
+  // Something the app needs is missing (first run, or Location turned off):
+  // open the setup guide. It stays until the user closes it.
+  $effect(() => {
+    if (app.setupNeeded) app.setupOpen = true
   })
 
   function onTabKeydown(event: KeyboardEvent, index: number) {
@@ -31,8 +33,8 @@
     else if (event.key === 'End') next = tabs.length - 1
     else return
     event.preventDefault()
-    active = tabs[next].id
-    document.getElementById(`tab-${active}`)?.focus()
+    app.tab = tabs[next].id
+    document.getElementById(`tab-${app.tab}`)?.focus()
   }
 </script>
 
@@ -45,10 +47,10 @@
         id="tab-{tab.id}"
         role="tab"
         type="button"
-        aria-selected={active === tab.id}
+        aria-selected={app.tab === tab.id}
         aria-controls="panel-{tab.id}"
-        tabindex={active === tab.id ? 0 : -1}
-        onclick={() => (active = tab.id)}
+        tabindex={app.tab === tab.id ? 0 : -1}
+        onclick={() => (app.tab = tab.id)}
         onkeydown={(event) => onTabKeydown(event, index)}
       >
         {tab.label}
@@ -56,18 +58,18 @@
     {/each}
   </div>
 
-  <div id="panel-{active}" class="panel" role="tabpanel" aria-labelledby="tab-{active}">
+  <div id="panel-{app.tab}" class="panel" role="tabpanel" aria-labelledby="tab-{app.tab}">
     {#if app.notice}
       <p class="notice">
         {app.notice}
         <button type="button" class="link" onclick={() => (app.notice = null)}>Dismiss</button>
       </p>
     {/if}
-    {#if active === 'networks'}
+    {#if app.tab === 'networks'}
       <Networks />
-    {:else if active === 'rules'}
+    {:else if app.tab === 'rules'}
       <Rules />
-    {:else if active === 'general'}
+    {:else if app.tab === 'general'}
       <General />
     {:else}
       <About />

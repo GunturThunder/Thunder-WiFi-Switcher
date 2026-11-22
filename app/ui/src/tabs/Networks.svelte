@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte'
 
   import { api } from '../lib/api'
-  import GetStarted from '../lib/GetStarted.svelte'
+  import SetupGuide from '../lib/SetupGuide.svelte'
   import { app } from '../lib/store.svelte'
   import type { JoinError, Nearby } from '../lib/types'
 
@@ -19,6 +19,8 @@
   let known = $state<string[]>([])
   let scanning = $state(false)
   let scanError = $state<string | null>(null)
+  // The last scan failed only because Location wasn't allowed yet.
+  let scanNeedsLocation = $state(false)
   let joining = $state<string | null>(null)
   // Why the last "Join now" failed, per network. Each one hides itself after
   // a few seconds, but not while the pointer or keyboard focus is on it.
@@ -49,16 +51,21 @@
   async function scan() {
     scanning = true
     scanError = null
+    scanNeedsLocation = false
     try {
       nearby = await api.nearbyNetworks()
     } catch (err) {
-      scanError = String(err).includes('Location')
-        ? 'Allow Location access to see nearby networks.'
-        : `Couldn't scan: ${err}`
+      scanNeedsLocation = String(err).includes('Location')
+      scanError = scanNeedsLocation ? 'Allow Location access to see nearby networks.' : `Couldn't scan: ${err}`
     } finally {
       scanning = false
     }
   }
+
+  // Scan again as soon as Location is allowed, so Nearby fills in by itself.
+  $effect(() => {
+    if (scanNeedsLocation && app.status?.permission === 'granted') scan()
+  })
 
   async function join(ssid: string) {
     joining = ssid
@@ -186,7 +193,9 @@
   }
 </script>
 
-<GetStarted />
+{#if app.setupOpen || app.setupNeeded}
+  <SetupGuide />
+{/if}
 
 <section>
   <h2>Your networks</h2>
