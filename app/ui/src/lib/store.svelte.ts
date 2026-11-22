@@ -3,7 +3,7 @@
 // button).
 
 import { api } from './api'
-import type { AppInfo, Config, NotificationPermission, Status } from './types'
+import type { AppInfo, Config, NotificationPermission, Status, UpdateStatus } from './types'
 
 export type Message = { kind: 'info' | 'error'; text: string }
 export type TabId = 'networks' | 'rules' | 'general' | 'about'
@@ -25,6 +25,7 @@ class AppStore {
   testNotificationSent = $state(false)
   /** Open at login; null until known. */
   autostart = $state<boolean | null>(null)
+  update = $state<UpdateStatus>({ state: 'idle' })
   #messageTimer: ReturnType<typeof setTimeout> | undefined
 
   async load() {
@@ -41,6 +42,8 @@ class AppStore {
       this.notice = notice
       await api.onStatus((status) => (this.status = status))
       await api.onConfig((config) => (this.config = config))
+      this.update = await api.updateStatus()
+      await api.onUpdate((update) => (this.update = update))
     } catch (err) {
       this.flash('error', `Couldn't load settings: ${err}`)
     }
@@ -86,6 +89,19 @@ class AppStore {
       await api.openLink('notification_settings')
     } catch (err) {
       this.flash('error', `Couldn't open notification settings: ${err}`)
+    }
+  }
+
+  async checkForUpdates() {
+    // The result also arrives as `update` events while it downloads.
+    this.update = await api.checkForUpdates().catch((err) => ({ state: 'failed' as const, message: String(err) }))
+  }
+
+  async installUpdate() {
+    try {
+      await api.installUpdate()
+    } catch (err) {
+      this.flash('error', String(err))
     }
   }
 

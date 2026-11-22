@@ -15,6 +15,7 @@ export interface Config {
   bad_ping_ms: number
   bad_loss_pct: number
   notify_on_switch: boolean
+  check_for_updates: boolean
   show_signal_label: boolean
   language: Language
   ping_targets: string[]
@@ -81,6 +82,15 @@ export interface Saved {
 }
 
 export type Link = 'repo' | 'privacy' | 'issues' | 'location_settings' | 'notification_settings'
+
+/** Where updating stands (updates.rs `UpdateStatus`). */
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'up_to_date' }
+  | { state: 'downloading'; version: string; percent: number | null }
+  | { state: 'ready'; version: string }
+  | { state: 'failed'; message: string }
 
 /** Whether the system shows the app's notifications (commands.rs). Only macOS can tell. */
 export type NotificationPermission = 'allowed' | 'blocked' | 'not_asked' | 'unknown'

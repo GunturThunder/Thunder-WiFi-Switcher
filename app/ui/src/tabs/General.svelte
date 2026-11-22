@@ -78,6 +78,18 @@
       </span>
     </label>
 
+    <label class="option">
+      <input
+        type="checkbox"
+        checked={config.check_for_updates}
+        onchange={(event) => app.save((c) => (c.check_for_updates = event.currentTarget.checked))}
+      />
+      <span>
+        <strong>Check for updates automatically</strong>
+        <small>Looks on GitHub twice a day and downloads new versions. Installing waits until you choose "Restart to Update".</small>
+      </span>
+    </label>
+
     <div class="option disabled">
       <span>
         <strong>Language</strong>

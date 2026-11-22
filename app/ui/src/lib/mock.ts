@@ -2,7 +2,7 @@
 // (`npm run dev`). Nothing here talks to real Wi-Fi.
 
 import type { Api } from './api'
-import type { Config, JoinError, NotificationPermission, Status } from './types'
+import type { Config, JoinError, NotificationPermission, Status, UpdateStatus } from './types'
 
 export function createMockApi(): Api {
   const query = new URLSearchParams(window.location.search)
@@ -22,6 +22,7 @@ export function createMockApi(): Api {
     bad_ping_ms: 300,
     bad_loss_pct: 10,
     notify_on_switch: false,
+    check_for_updates: true,
     show_signal_label: true,
     language: 'en',
     ping_targets: ['1.1.1.1', '8.8.8.8'],
@@ -56,11 +57,19 @@ export function createMockApi(): Api {
     { ssid: 'Kos Melati', rssi: -84 },
   ]
   let autostart = false
+  // `?update=failed` previews a check that couldn't reach GitHub.
+  const updateFails = query.get('update') === 'failed'
+  let update: UpdateStatus = { state: 'idle' }
   const statusListeners = new Set<(status: Status) => void>()
+  const updateListeners = new Set<(update: UpdateStatus) => void>()
   const configListeners = new Set<(config: Config) => void>()
 
   const clone = <T>(value: T): T => structuredClone(value)
   const emitStatus = () => statusListeners.forEach((listener) => listener(clone(status)))
+  const setUpdate = (next: UpdateStatus) => {
+    update = next
+    updateListeners.forEach((listener) => listener(clone(update)))
+  }
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
   return {
@@ -169,9 +178,34 @@ export function createMockApi(): Api {
       autostart = enabled
     },
     startupNotice: async () => null,
+    updateStatus: async () => clone(update),
+    checkForUpdates: async () => {
+      setUpdate({ state: 'checking' })
+      await delay(700)
+      if (updateFails) {
+        setUpdate({
+          state: 'failed',
+          message: "Couldn't reach GitHub. Check your internet connection, or try again later.",
+        })
+        return clone(update)
+      }
+      for (const percent of [0, 35, 70, 100]) {
+        setUpdate({ state: 'downloading', version: '0.5.1', percent })
+        await delay(300)
+      }
+      setUpdate({ state: 'ready', version: '0.5.1' })
+      return clone(update)
+    },
+    installUpdate: async () => {
+      console.info('would install 0.5.1 and restart')
+    },
     onStatus: async (callback) => {
       statusListeners.add(callback)
       return () => statusListeners.delete(callback)
+    },
+    onUpdate: async (callback) => {
+      updateListeners.add(callback)
+      return () => updateListeners.delete(callback)
     },
     onConfig: async (callback) => {
       configListeners.add(callback)
