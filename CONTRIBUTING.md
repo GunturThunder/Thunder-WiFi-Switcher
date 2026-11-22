@@ -138,15 +138,19 @@ On Linux, add `--exclude thunder-wifi-switcher` to the `clippy` and `test` comma
 
 ## Releasing (maintainers)
 
-1. In a pull request, set the version in `Cargo.toml` (`[workspace.package]`) and move the `Unreleased` changelog entries under the new version. Keep the version plain numbers (`0.5.0`): Windows installers can't carry labels like `-beta`.
-2. After it's merged, tag `main` and push the tag. A tag with a label marks a pre-release of that version:
+1. In a pull request, set the version in `Cargo.toml` (`[workspace.package]`) and move the `Unreleased` changelog entries under the new version.
+   - Keep it plain numbers (`0.5.0`): Windows installers can't carry labels like `-beta`.
+   - Every release needs a higher number than the last, betas too (`0.5.0`, then `0.5.1`, …). Installed apps compare these numbers to decide whether to update.
+2. After it's merged, tag `main` and push the tag. A label after the number is fine for people (`v0.5.1-beta.2`), as long as the number matches `Cargo.toml`:
 
    ```bash
-   git tag v0.5.0-beta.1 && git push origin v0.5.0-beta.1
+   git tag v0.5.0 && git push origin v0.5.0
    ```
 
-3. `release.yml` builds the macOS `.dmg` (universal) and the Windows `.msi` (x64 and ARM64) and attaches them to a **draft** release. It stops if the tag doesn't match the version.
-4. Run [docs/TESTING.md](docs/TESTING.md) with those installers on a Mac and a Windows laptop, then publish the draft.
+3. `release.yml` builds the macOS `.dmg` (universal) and the Windows `.msi` (x64 and ARM64), signs the update files, and attaches everything, including `latest.json`, to a **draft** release. It stops if the tag doesn't match the version.
+4. Run [docs/TESTING.md](docs/TESTING.md) with those installers on a Mac and a Windows laptop, then publish the draft. Don't tick "Set as a pre-release": installed apps only look at the latest release.
+
+The update files are signed with the Tauri updater key, kept in the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Only the maintainer has the private key (with a backup). If it's lost, installed apps can't update any more and need a manual reinstall; if it leaks, make a new key and rotate the secrets and the public key in `app/src-tauri/tauri.conf.json`.
 
 A pull request that changes `release.yml` builds the same installers as workflow artifacts (on the PR's checks page), without releasing anything.
 

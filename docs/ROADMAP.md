@@ -97,7 +97,7 @@ Done when: pushing a version tag produces signed installers on GitHub Releases t
 
 - [ ] `release.yml` with `tauri-action`: universal .dmg, .msi for x64 and ARM64 — Claude Code
 - [ ] Apply to SignPath for free Windows signing — you
-- [ ] Decide on Apple Developer ID ($99/year) or ship unsigned with Homebrew instructions — you
+- [ ] Decide on Apple Developer ID ($99/year) or ship unsigned with Homebrew instructions — you. **Decided: unsigned** (November 2026)
 - [ ] Tauri updater: signing key in secrets, `latest.json` on Releases — Claude Code
 - [ ] Switch notifications and the 24-hour history graph (nice-to-have) — Claude Code
 - [ ] Setup guide: first-run steps that say what each permission is for and what the system will ask (Location, Keychain, notifications, open at login) — Claude Code
@@ -109,7 +109,7 @@ Done when: pushing a version tag produces signed installers on GitHub Releases t
 Done when: **v1.0** is on GitHub Releases, Homebrew and winget, with docs a stranger can follow.
 
 - [ ] README: screenshots, install steps per OS, FAQ (why Location?) — Claude Code, you
-- [ ] Homebrew cask and winget manifest, updated by the release workflow — Claude Code
+- [ ] Homebrew tap (our own: the official homebrew-cask doesn't take unsigned apps) and winget manifest, updated by the release workflow — Claude Code
 - [ ] Label 5–10 "good first issue" tasks for new contributors — you
 - [ ] Launch post (GitHub, Reddit r/macapps and r/windows, campus groups) — you
 - [ ] Fix launch-week bugs; tag v1.0.1 — Claude Code, you

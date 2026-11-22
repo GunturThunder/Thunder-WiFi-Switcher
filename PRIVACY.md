@@ -35,7 +35,7 @@ Uninstalling the app and deleting these folders (and the `ThunderWiFi` Keychain 
 | Traffic | To | Why |
 | --- | --- | --- |
 | Tiny ping (ICMP), or a plain TCP connection to port 443 if ping is blocked, every 5 seconds | Your router, `1.1.1.1` (Cloudflare) and `8.8.8.8` (Google), or other servers you choose in Settings | To measure whether the current network's internet is working. Roughly 0.1 KB per second. The servers see the same thing as any ping: your public IP address. |
-| Update check | GitHub (`github.com`) | To see whether a new version is available. Planned for a later release. |
+| Update check | GitHub (`github.com`) | Twice a day, and when you click **Check for updates**, the app downloads a small file (`latest.json`) from the project's GitHub Releases to see whether a new version exists, then downloads that version. GitHub sees your public IP address, as with any download. Turn it off in Settings → General → **Check for updates automatically**. |
 
 Nothing else. The app doesn't contact any server run by the developers, because there isn't one.
 

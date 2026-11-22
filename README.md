@@ -99,8 +99,8 @@ scripts/run-app-macos.sh --simulate   # pretend networks
 | Release | What's in it |
 | --- | --- |
 | v0.1 Mac alpha | Menu bar app that switches on signal strength (macOS) |
-| v0.5 beta | Adds internet-quality checks, and Windows |
-| v1.0 | Signed installers, auto-update, Homebrew and winget |
+| v0.5 beta | Adds internet-quality checks, Windows, notifications and auto-update |
+| v1.0 | Signed Windows installer, Homebrew tap and winget |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the phase-by-phase plan and [docs/TECHNICAL-DESIGN.md](docs/TECHNICAL-DESIGN.md) for how it's built.
 

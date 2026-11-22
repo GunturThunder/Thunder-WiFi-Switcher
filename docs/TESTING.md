@@ -52,4 +52,5 @@ Leave the app running for 10 minutes on a working network, then check Activity M
 ## Upgrade and uninstall
 
 - [ ] Installing the new version over the previous one keeps your networks, order and settings.
+- [ ] **Auto-update** (from the previous published release, once there is one): About → **Check for updates** finds the new version and downloads it; the menu shows **Restart to Update to …**; choosing it installs and reopens the app on the new version (About shows it). **macOS:** the setup guide opens by itself to allow Location again. **Windows:** a small installer progress bar appears, then the app reopens.
 - [ ] Uninstalling removes the app: drag it to the Bin (macOS), or use Settings → Apps (Windows). The settings and logs folders listed in [PRIVACY.md](../PRIVACY.md) can be deleted by hand.
