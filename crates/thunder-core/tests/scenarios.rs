@@ -598,3 +598,34 @@ fn quality_is_not_checked_while_paused() {
     sim.run(mins(1));
     assert!(sim.driver.quality().is_none());
 }
+
+#[test]
+fn a_single_lost_round_of_checks_does_not_switch() {
+    let mut sim = two_strong_networks();
+    // For one check, nothing answers: not the router, not the internet.
+    sim.wifi.set_router("Dorm-A", None);
+    sim.wifi.set_internet("Dorm-A", None);
+    sim.tick();
+    sim.wifi.set_router("Dorm-A", Some(3));
+    sim.wifi.set_internet("Dorm-A", Some(20));
+    sim.run(mins(10));
+    assert!(sim.switches().is_empty(), "{:?}", sim.switches());
+    assert_eq!(sim.scans(), 0);
+}
+
+#[test]
+fn a_rough_start_on_a_network_does_not_switch() {
+    let mut sim = Sim::new(&["Dorm-A", "Dorm-B"]);
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.set_network("Dorm-B", -55);
+    // While the laptop is still joining, nothing answers for 10 seconds.
+    sim.wifi.set_router("Dorm-A", None);
+    sim.wifi.set_internet("Dorm-A", None);
+    sim.wifi.join("Dorm-A");
+    sim.run(secs(10));
+    sim.wifi.set_router("Dorm-A", Some(3));
+    sim.wifi.set_internet("Dorm-A", Some(20));
+    sim.run(mins(10));
+    assert!(sim.switches().is_empty(), "{:?}", sim.switches());
+    assert_eq!(sim.scans(), 0);
+}
