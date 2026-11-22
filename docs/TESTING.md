@@ -13,9 +13,10 @@ Copy the checklist into the release's pull request or issue and tick it off. Not
 - [ ] The installer opens and installs (macOS: drag to Applications; Windows: run the `.msi`).
 - [ ] The first launch works after the one-time unsigned-app step in the [README](../README.md#install).
 - [ ] The icon appears in the menu bar / tray, with no Dock icon (macOS) or taskbar window (Windows).
-- [ ] The settings window opens by itself on first run, with the Get started card.
-- [ ] **macOS:** **Allow Location** shows the macOS prompt; after **Allow**, the card disappears within about 5 seconds and the top of the window shows your network.
-- [ ] **Windows 11 24H2+:** with location off for desktop apps, the card says so and **Open Location settings** opens the right page; after turning it on, the network appears.
+- [ ] The settings window opens by itself on first run, with the setup guide. Each step's text matches what the system really shows (Location prompt, Keychain prompt on the first join, the notification question, "Background Items Added").
+- [ ] **macOS:** **Allow Location** shows the macOS prompt; after **Allow**, step 1 shows Done within about 5 seconds, **Nearby** fills in by itself, and the top of the window shows your network.
+- [ ] **Windows 11 24H2+:** with location off for desktop apps, step 1 says so and **Open Location settings** opens the right page; after turning it on, the network appears.
+- [ ] After adding a network, the guide says "You're set"; **Done** closes it, and About → **Setup guide** brings it back.
 
 ## Networks
 

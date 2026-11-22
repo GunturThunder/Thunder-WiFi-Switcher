@@ -100,6 +100,7 @@ Done when: pushing a version tag produces signed installers on GitHub Releases t
 - [ ] Decide on Apple Developer ID ($99/year) or ship unsigned with Homebrew instructions — you
 - [ ] Tauri updater: signing key in secrets, `latest.json` on Releases — Claude Code
 - [ ] Switch notifications and the 24-hour history graph (nice-to-have) — Claude Code
+- [ ] Setup guide: first-run steps that say what each permission is for and what the system will ask (Location, Keychain, notifications, open at login) — Claude Code
 - [ ] Bahasa Indonesia translation — you
 - [ ] `docs/TESTING.md` manual checklist, run once on each OS — you, Windows tester
 

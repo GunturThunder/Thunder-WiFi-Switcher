@@ -16,6 +16,10 @@
     <button type="button" onclick={() => api.openLink('privacy')}>Privacy</button>
     <button type="button" onclick={() => api.openLink('issues')}>Report a problem</button>
   </div>
+  <p>
+    <button type="button" class="link" onclick={() => app.openSetup()}>Setup guide</button>
+    · what the app asks for, and why
+  </p>
   <p class="hint">
     Free and open source under the MIT license. Automatic updates arrive with v1.0; until then, new versions
     are on GitHub.
