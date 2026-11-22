@@ -13,7 +13,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../app"
 
 [ -d node_modules ] || npm ci
-npm run --silent tauri -- build --debug --bundles app
+# Local builds skip the signed update files: only the release workflow has the key.
+npm run --silent tauri -- build --debug --bundles app \
+  --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
 APP="$(cd .. && pwd)/target/debug/bundle/macos/Thunder WiFi Switcher.app"
 # Quit a copy that's already running, so the new build (and flags) take effect.
