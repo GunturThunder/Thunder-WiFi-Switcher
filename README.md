@@ -9,6 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/latest"><strong>Download for Mac and Windows</strong></a>
+  · <a href="#install">How to install</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/latest"><img src="https://img.shields.io/github/v/release/GunturThunder/Thunder-WiFi-Switcher?label=download" alt="Latest release"></a>
   <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/actions/workflows/ci.yml"><img src="https://github.com/GunturThunder/Thunder-WiFi-Switcher/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey.svg" alt="macOS and Windows">
