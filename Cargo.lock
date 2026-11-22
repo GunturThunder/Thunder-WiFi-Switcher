@@ -4612,7 +4612,7 @@ dependencies = [
 
 [[package]]
 name = "thunder-core"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "tempfile",
@@ -4622,7 +4622,7 @@ dependencies = [
 
 [[package]]
 name = "thunder-wifi-switcher"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "log",
@@ -5292,7 +5292,7 @@ dependencies = [
 
 [[package]]
 name = "wifi-macos"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "block2",
  "dispatch2",
@@ -5312,7 +5312,7 @@ dependencies = [
 
 [[package]]
 name = "wifi-windows"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "thunder-core",
  "windows",

@@ -6,36 +6,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+The first public release, a beta for macOS 14 or later and Windows 10 22H2 or Windows 11 (x64 and ARM64).
+
 ### Added
 
-- Automatic updates: the app looks for a new version on GitHub twice a day, downloads it in the background, and installs it when you choose **Restart to Update** in its menu (or About → **Restart to update**). About → **Check for updates** checks now. You can turn the checks off in General. On macOS, an update makes macOS ask for Location again (the app isn't signed by Apple); the setup guide opens by itself to help.
-- Setup guide on first run (Networks tab, and About → **Setup guide** any time): each step says what the app asks for, why, and what macOS or Windows will show: Location, your networks and their passwords (Keychain), notifications, and open at login. Each step shows whether it's done. After you allow Location, the Nearby list fills in by itself.
-- Switch notifications (General → **Notify me when it switches**, off by default): when the app switches networks by itself, a notification says where it went and why, for example "Switched to Dorm-2.4 · Dorm-5G's signal was weak (-81 dBm)". Switches you make yourself don't notify. Turning it on sends a test notification. On macOS the app asks for permission when you turn it on, and if macOS is blocking its notifications, the settings window says so, with **Open notification settings** to fix it.
-- **Join now** in the settings window now says why joining failed, right under the network, and offers the fix: not in range, no password saved, wrong password, Location permission needed, Wi-Fi turned off, no answer in time, or a network that needs a user name (WPA Enterprise, which the app can't join yet). No pop-ups: the message hides itself after 5 seconds.
-- Release workflow: pushing a version tag builds the macOS `.dmg` (Apple Silicon and Intel) and Windows `.msi` (x64 and ARM64) and attaches them to a draft GitHub Release.
-- Install instructions in the README, and a manual release checklist in `docs/TESTING.md`.
-- Internet-quality checks: every 5 seconds the app pings your router, 1.1.1.1 and 8.8.8.8 (falling back to a port-443 connection when ping is blocked) and switches away from a network whose internet is down or slow, or whose router stops responding, even with a strong signal. A network left for bad internet is skipped for 10 minutes.
-- Ping in the menu bar label (`-58 · 24ms`), the menu and the settings window; "no internet" when the checks fail.
-- `ping` command in both probe tools; `--simulate` now includes an internet outage.
-- Windows Wi-Fi backend (`wifi-windows`): reads the current network and signal, scans, joins networks with the profiles Windows has saved, lists them, finds the router, detects when location is off for desktop apps (Windows 11 24H2+), and reports sleep and resume. The app now uses it on Windows.
-- Windows `probe` tool (`cargo run -p wifi-windows --example probe`).
-- The app now runs the switching engine on real Wi-Fi (macOS): menu bar icon with signal level and an optional `-58` label, a menu with status, last switch, auto-switch toggle and "Switch to", and logs in `~/Library/Logs/ThunderWiFi/`.
-- Settings window: add networks from the ones nearby, save their passwords in the Keychain, drag them into priority order, set the weak-signal level, open at login, and a first-run card for Location permission.
-- `--simulate` mode with pretend networks, and `scripts/run-app-macos.sh` to try a debug build on real Wi-Fi.
-- macOS Wi-Fi backend (`wifi-macos`): reads the current network and signal, scans, joins networks with passwords from the Keychain, lists known networks, finds the router, asks for Location permission, and reports sleep and wake.
-- `probe` tool for trying the macOS backend on real Wi-Fi (`scripts/probe-macos.sh`).
-- Switching engine in `thunder-core`: watches signal every 5 seconds, switches after 15 seconds of weak signal to a saved network at least 8 dB stronger, reconnects straight away when Wi-Fi drops, and backs off from 30 seconds to 5 minutes when nothing better is in range.
-- Settings file (TOML) with defaults, forgiving loading of hand-edited files, and recovery from unreadable files.
-- Fake Wi-Fi backend and scenario tests (walking away, flapping signal, two equal networks, dropped connection, sleep and wake).
-- Repository setup: PRD, technical design and roadmap in `docs/`, app icons, and the original Swift prototype for reference.
-- Community files: README, MIT license, code of conduct, contributing guide, security policy and privacy policy.
-- Issue forms (bug report, feature request, network report) and a pull request template.
-- CI on Linux, macOS and Windows: formatting, Clippy, tests, UI checks and an app build.
-- Cargo workspace with `thunder-core`, `wifi-macos` and `wifi-windows` crates (empty for now).
-- Tauri v2 app skeleton: menu bar / tray icon with a basic menu, and an empty settings window.
-- Menu bar template icons (0–3 arcs and disconnected) in `assets/icons/menubar`; the macOS menu bar now uses them.
+- **Switching to the network with the best internet.** Every 5 seconds the app checks the current Wi-Fi network and moves to another of your saved networks:
+  - after 15 seconds of weak signal, to a network at least 8 dB stronger;
+  - straight away when Wi-Fi drops;
+  - when the internet is down or slow, or the router stops responding, even with a strong signal. A network left for bad internet is skipped for 10 minutes.
+  - When nothing better is in range, it waits 30 seconds before looking again, doubling up to 5 minutes. Checks pause while the laptop sleeps.
+- **Internet checks.** A tiny ping to your router, 1.1.1.1 and 8.8.8.8, or a port-443 connection when ping is blocked. The internet only counts as bad when every public server fails, one lost ping never counts, and the first 10 seconds on a network aren't judged. When the internet is judged bad, the log says what each server did.
+- **Menu bar / tray icon** with the signal level and an optional label (`-58 · 24ms`), and a menu with the status, the last switch, **Auto-switch** and **Switch to**.
+- **Settings window:**
+  - add networks from the ones nearby, and drag them into priority order;
+  - **Join now**, which says why joining failed (not in range, no password saved, wrong password, Location needed, Wi-Fi off, no answer, or a network that needs a user name) and offers the fix;
+  - set the weak-signal level, the bad ping and loss limits, and the ping servers;
+  - open at login.
+  - On macOS, each network's password is saved once in your Keychain; the app only checks that it's there, so opening the window never asks for your Mac password. On Windows, the app uses the passwords Windows has saved.
+- **Setup guide** on first run, and from About any time: what the app asks for, why, and what macOS or Windows will show. It covers Location, your networks and their passwords, notifications, and open at login. After you allow Location, the Nearby list fills in by itself.
+- **Switch notifications** (off by default): when the app switches by itself, a notification says where it went and why. On macOS the app asks for permission when you turn them on, and says so if macOS is blocking them.
+- **Automatic updates:** the app looks for a new version twice a day, downloads it in the background, and installs it when you choose **Restart to Update** in its menu. You can turn the checks off in General. On macOS, macOS asks for Location again after an update, because the app isn't signed by Apple; the setup guide opens by itself to help.
+- **Privacy:** the app stores only its settings file, your Wi-Fi passwords (macOS Keychain) and a log of network names, signal and ping. It sends nothing but the pings and the update check. See [PRIVACY.md](PRIVACY.md).
+- **For contributors:** pretend networks (`--simulate`), probe tools for real Wi-Fi on macOS and Windows, scenario tests, CI on Linux, macOS and Windows, and a release workflow that builds the installers and signs the update files.
 
-### Fixed
-
-- The app no longer leaves a working network because of one lost ping, or because of lost pings in the first seconds after joining it or starting. Loss now needs at least 2 lost checks in 30 seconds, and the checks wait 10 seconds after joining. When the internet is judged bad, the log now shows what each server did.
-- Opening the settings window no longer makes macOS ask for your Keychain password once per saved network: the app now checks that a password is saved without reading it.
+[Unreleased]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/tag/v0.5.0

@@ -9,6 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/latest"><strong>Download for Mac and Windows</strong></a>
+  · <a href="#install">How to install</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/latest"><img src="https://img.shields.io/github/v/release/GunturThunder/Thunder-WiFi-Switcher?label=download" alt="Latest release"></a>
   <a href="https://github.com/GunturThunder/Thunder-WiFi-Switcher/actions/workflows/ci.yml"><img src="https://github.com/GunturThunder/Thunder-WiFi-Switcher/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey.svg" alt="macOS and Windows">
@@ -78,12 +84,14 @@ Download the latest installer from [Releases](https://github.com/GunturThunder/T
 - **macOS 14 or later** (Apple Silicon and Intel): the `.dmg`. Open it and drag Thunder WiFi Switcher to Applications.
 - **Windows 10 22H2 or Windows 11:** the `x64` `.msi`, or the `arm64` one on ARM laptops.
 
-The builds aren't signed yet (planned before v1.0), so the first launch needs one extra step:
+The builds aren't signed by Apple or Microsoft, so the first launch needs one extra step (Windows signing is planned):
 
 - **macOS:** open the app once. When macOS says it can't check it, go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run this in Terminal: `xattr -dr com.apple.quarantine "/Applications/Thunder WiFi Switcher.app"`.
 - **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
 
-When the app first starts, allow Location access (macOS), or turn on **Let desktop apps access your location** (Windows 11 24H2 and later). Both systems hide Wi-Fi network names from apps without it; [PRIVACY.md](PRIVACY.md) explains why that's safe.
+When the app first starts, its setup guide walks you through it: allow Location access (macOS), or turn on **Let desktop apps access your location** (Windows 11 24H2 and later). Both systems hide Wi-Fi network names from apps without it; [PRIVACY.md](PRIVACY.md) explains why that's safe.
+
+**Updates** come by themselves: the app downloads a new version in the background, and **Restart to Update** in its menu installs it. On macOS, allow Location again after an update (the setup guide opens to help).
 
 ## Build from source
 
