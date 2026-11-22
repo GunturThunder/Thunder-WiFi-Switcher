@@ -86,6 +86,7 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
   - Leaving a network for bad internet, or failing to join it, marks it in `avoid_until` for 10 minutes.
 - **`rules.rs`:** every PRD number as a constant, plus `assess()` (is this sample a problem?) and `choose_network()` (which candidate wins: `Requirement::StrongerThan` for weak signal (8 dB margin), `AtLeast(weak_signal_dbm)` for bad internet, `Any` when disconnected; list priority wins within 3 dB).
 - **`quality.rs`:** 6-result windows per target, a median and loss figure for each, judged only from 3 results onwards.
+  - The first 2 rounds on a network (`GRACE_ROUNDS`) probe nothing, and loss needs at least 2 lost probes (`MIN_LOST`), so joining a network or one lost ping never causes a switch.
   - A failed ping is retried right away over TCP port 443 (a refusal counts as an answer). After 3 such retries the target stays on TCP for that network.
   - The internet is bad only if **every** public target is bad.
   - The router only counts once it has answered on this network.

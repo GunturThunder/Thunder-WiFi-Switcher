@@ -154,7 +154,7 @@ The engine is a state machine with one entry point: `Engine::step(now, event) ->
 | Paused | User turns auto-switch back on | Watching |
 | Paused | Wake from sleep (if the user hadn't paused it) | Cooldown 15 s, so the OS can rejoin a network itself first |
 
-A sample is bad when signal is under the threshold (default -75 dBm; -75 itself is fine), or when the quality checks say the router is failing (`BadLink`) or both public targets show ping over 300 ms or loss over 10% (`BadInternet`). A weak signal is checked first, since it explains the rest. Each sample carries the verdict: `Sample::Connected(link, internet)`.
+A sample is bad when signal is under the threshold (default -75 dBm; -75 itself is fine), or when the quality checks say the router is failing (`BadLink`) or both public targets show ping over 300 ms or loss over 10% with at least 2 lost probes (`BadInternet`). A weak signal is checked first, since it explains the rest. Each sample carries the verdict: `Sample::Connected(link, internet)`.
 
 The engine stays hands-off when Wi-Fi is off, when the user has no enabled networks, and when the laptop is on a network that isn't in the user's list or is turned off there (a café, a phone hotspot). Those samples never start a search.
 
@@ -178,12 +178,13 @@ Every 5 seconds the prober sends one probe to each of three targets in parallel 
 | 1.1.1.1 | ICMP echo; fallback TCP connect to port 443 | 2 s each |
 | 8.8.8.8 | ICMP echo; fallback TCP connect to port 443 | 2 s each |
 
-- `thunder_core::quality::Prober` runs the probes on scoped threads (a tick takes at most about 4 s) and starts a new window whenever the network name changes. The `Driver` calls it on each tick while connected and not paused, and puts the verdict in the sample.
-- Ping = median round-trip time in the window (the upper middle for an even count); loss = failed probes ÷ probes sent. A target is judged only once it has 3 results (15 s), so a just-joined network isn't called bad on its first lost probe.
+- `thunder_core::quality::Prober` runs the probes on scoped threads (a tick takes at most about 4 s) and starts a new window whenever the network name changes. The first 2 rounds on a network (10 s), and after a reset, probe nothing: while the laptop is still getting an address, lost pings say nothing about the network. The `Driver` calls it on each tick while connected and not paused, and puts the verdict in the sample.
+- Ping = median round-trip time in the window (the upper middle for an even count); loss = failed probes ÷ probes sent. A target is judged only once it has 3 results (15 s, so about 25 s after joining). Loss counts only when at least 2 probes in the window got no answer: one lost ping in 6 is normal on Wi-Fi.
 - A failed ping is retried right away as a TCP connection to port 443, so networks that drop ICMP don't look lossy. If that happens 3 times, the target switches to TCP for that network and stays there until the network changes. A refused connection counts as an answer.
 - The router counts only if it has answered at least once on this network: some routers ignore ping and have no port 443, and they shouldn't look broken.
 - ICMP without admin rights: an unprivileged datagram ICMP socket on macOS (`socket2`; replies are matched by sequence number and an 8-byte token), `IcmpSendEcho` on Windows. IPv6 targets use the TCP check.
 - Probes stop while the laptop sleeps, Wi-Fi is off, or the engine is paused.
+- When the verdict turns bad, the log lists what each target did (`router 192.168.1.1: 0 of 6 lost, 4 ms · 1.1.1.1: 2 of 6 lost, 41 ms`), so a network report shows why.
 - Traffic: three tiny packets every 5 s, about 0.1 KB/s.
 - The tray shows the best public median: `-58 · 24ms` next to the icon, `Connected: Dorm-5G · -58 dBm · 24 ms` in the menu, and "no internet", "slow internet" or "router not responding" when the checks say so.
 
