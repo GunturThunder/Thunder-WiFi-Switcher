@@ -263,7 +263,10 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         _ => {
             if let Some(ssid) = id.strip_prefix(MENU_SWITCH_PREFIX) {
-                state.worker.send(Command::SwitchTo(ssid.to_owned()));
+                state.worker.send(Command::SwitchTo {
+                    ssid: ssid.to_owned(),
+                    reply: None,
+                });
                 // Clicking toggled the checkmark; redraw it from the real state.
                 state.tray.forget_switch_to();
                 state.refresh_tray(app, &state.worker.status());

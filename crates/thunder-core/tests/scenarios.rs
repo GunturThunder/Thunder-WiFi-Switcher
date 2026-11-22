@@ -398,6 +398,31 @@ fn wifi_turned_off_does_nothing() {
 }
 
 #[test]
+fn picking_a_network_while_wifi_is_off_says_so_and_skips_nothing() {
+    let mut sim = Sim::new(&["Dorm-A", "Dorm-B"]);
+    sim.wifi.set_network("Dorm-A", -60);
+    sim.wifi.set_network("Dorm-B", -50);
+    sim.wifi.set_powered(false);
+    sim.run(secs(10));
+    sim.send(Event::UserSwitch {
+        ssid: "Dorm-B".into(),
+    });
+    assert_eq!(
+        sim.notices.last().map(|(_, notice)| notice),
+        Some(&Notice::ConnectFailed {
+            ssid: "Dorm-B".into(),
+            error: Error::WifiOff,
+        })
+    );
+    assert!(sim.connect_attempts().is_empty());
+
+    // Once Wi-Fi is back on, Dorm-B is joined straight away, not skipped.
+    sim.wifi.set_powered(true);
+    sim.run(secs(10));
+    assert_eq!(sim.connected().as_deref(), Some("Dorm-B"));
+}
+
+#[test]
 fn a_network_the_user_has_not_added_is_left_alone() {
     let mut sim = Sim::new(&["Dorm-A"]);
     sim.wifi.set_network("Cafe-Free-WiFi", -85);

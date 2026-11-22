@@ -23,6 +23,7 @@ Copy the checklist into the release's pull request or issue and tick it off. Not
 - [ ] Adding both of your networks works. **macOS:** the password field appears and saving says so (the Keychain may ask once; choose **Always Allow**). **Windows:** the note about saved Windows passwords is shown instead.
 - [ ] Dragging (or ↑ ↓) changes the order, and the order is still there after quitting and reopening.
 - [ ] **Switch to** in the menu moves to the other network within a few seconds; the menu's second line says "Switched to …".
+- [ ] **Join now** in the settings window shows "Joining…", then "Joined …". With a wrong password saved (macOS), it says so under the network with **Change password**; a network out of range says it isn't in range.
 - [ ] Turning a network off (checkbox) removes it from **Switch to**.
 
 ## Switching on its own

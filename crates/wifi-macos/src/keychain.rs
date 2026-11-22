@@ -11,6 +11,10 @@ use thunder_core::{Error, Result};
 
 /// `errSecItemNotFound`: no such item.
 const NOT_FOUND: i32 = -25300;
+/// What macOS answers when the user said no to its Keychain prompt
+/// (`errSecUserCanceled`), typed the wrong login password there
+/// (`errSecAuthFailed`), or couldn't be asked (`errSecInteractionNotAllowed`).
+const READ_DENIED: [i32; 3] = [-128, -25293, -25308];
 
 /// The app's Wi-Fi passwords in the Keychain.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,7 +88,7 @@ impl PasswordStore {
                 .map(Some)
                 .map_err(|_| Error::Os("Keychain: the saved password isn't valid text".into())),
             Err(err) if err.code() == NOT_FOUND => Ok(None),
-            Err(err) => Err(keychain_error(err)),
+            Err(err) => Err(read_error(err)),
         }
     }
 
@@ -111,6 +115,19 @@ fn keychain_error(err: KeychainError) -> Error {
     Error::Os(format!("Keychain: {err}"))
 }
 
+/// Reading a password failed: say what to do when the user said no.
+fn read_error(err: KeychainError) -> Error {
+    if READ_DENIED.contains(&err.code()) {
+        Error::Os(
+            "macOS didn't let the app read the saved password. Try again, and choose \
+             Always Allow when macOS asks."
+                .into(),
+        )
+    } else {
+        keychain_error(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +151,18 @@ mod tests {
         assert_eq!(store.get(&ssid).unwrap(), None);
         assert!(!store.contains(&ssid).unwrap());
         store.delete(&ssid).unwrap();
+    }
+
+    #[test]
+    fn saying_no_to_the_keychain_prompt_explains_what_to_do() {
+        let Error::Os(text) = read_error(KeychainError::from_code(-128)) else {
+            panic!("expected an OS error");
+        };
+        assert!(text.contains("Always Allow"), "{text}");
+        assert!(matches!(
+            read_error(KeychainError::from_code(-25299)),
+            Error::Os(text) if text.starts_with("Keychain: ")
+        ));
     }
 
     #[test]

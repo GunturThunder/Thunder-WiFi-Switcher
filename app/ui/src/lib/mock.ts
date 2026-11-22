@@ -2,7 +2,7 @@
 // (`npm run dev`). Nothing here talks to real Wi-Fi.
 
 import type { Api } from './api'
-import type { Config, Status } from './types'
+import type { Config, JoinError, Status } from './types'
 
 export function createMockApi(): Api {
   // `?platform=windows` previews the Windows version of the window.
@@ -38,6 +38,14 @@ export function createMockApi(): Api {
     simulated: false,
   }
   const passwords = new Set(['Dorm-5G'])
+  // Type "wrong" as a password to preview the wrong-password message.
+  const wrongPasswords = new Set<string>()
+  const nearby = [
+    { ssid: 'Dorm-5G', rssi: -58 },
+    { ssid: 'Dorm-2.4', rssi: -66 },
+    { ssid: 'Library', rssi: -79 },
+    { ssid: 'Kos Melati', rssi: -84 },
+  ]
   let autostart = false
   const statusListeners = new Set<(status: Status) => void>()
   const configListeners = new Set<(config: Config) => void>()
@@ -72,6 +80,32 @@ export function createMockApi(): Api {
       status = { ...status, activity: 'switching' }
       emitStatus()
       await delay(800)
+      // Same cases as the app; the wording is shortened here.
+      let problem: JoinError | null = null
+      if (!nearby.some((network) => network.ssid === ssid)) {
+        problem = { kind: 'not_in_range', message: `${ssid} isn't in range right now.` }
+      } else if (ssid === 'Library') {
+        problem = { kind: 'needs_user_name', message: `${ssid} needs a user name as well as a password.` }
+      } else if (!passwords.has(ssid)) {
+        const message = windows
+          ? `Windows hasn't saved a password for ${ssid}. Connect to it once from the Windows Wi-Fi menu, then try again.`
+          : `No password is saved for ${ssid}. Add it, then try again.`
+        problem = { kind: 'no_password', message }
+      } else if (wrongPasswords.has(ssid)) {
+        problem = {
+          kind: 'wrong_password',
+          message: `${ssid} didn't accept the connection. The saved password may be wrong: change it, then try again.`,
+        }
+      }
+      if (problem) {
+        status = {
+          ...status,
+          activity: 'watching',
+          last_event: { time: 'now', text: `Couldn't join ${ssid}` },
+        }
+        emitStatus()
+        throw problem
+      }
       status = {
         ...status,
         ssid,
@@ -83,12 +117,7 @@ export function createMockApi(): Api {
     },
     nearbyNetworks: async () => {
       await delay(600)
-      return [
-        { ssid: 'Dorm-5G', rssi: -58 },
-        { ssid: 'Dorm-2.4', rssi: -66 },
-        { ssid: 'Library', rssi: -79 },
-        { ssid: 'Kos Melati', rssi: -84 },
-      ]
+      return clone(nearby)
     },
     knownNetworks: async () => ['Dorm-5G', 'Dorm-2.4', 'Library', 'Home'],
     passwordStatus: async (ssids) =>
@@ -96,9 +125,12 @@ export function createMockApi(): Api {
     setPassword: async (ssid, password) => {
       if (password) passwords.add(ssid)
       else passwords.delete(ssid)
+      if (password === 'wrong') wrongPasswords.add(ssid)
+      else wrongPasswords.delete(ssid)
     },
     deletePassword: async (ssid) => {
       passwords.delete(ssid)
+      wrongPasswords.delete(ssid)
     },
     requestPermission: async () => {
       await delay(1000)

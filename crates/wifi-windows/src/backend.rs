@@ -80,11 +80,8 @@ impl WifiBackend for WinBackend {
             .find_map(|network| network.profile.clone());
         match profile {
             Some(profile) => session.connect_and_wait(&interface, &profile, CONNECT_TIMEOUT),
-            None if available.iter().any(|network| network.ssid == ssid) => {
-                Err(Error::Os(format!(
-                    "Windows hasn't saved a password for {ssid}. Connect to it once from the Windows Wi-Fi menu first."
-                )))
-            }
+            // In range, but Windows has no profile (password) for it.
+            None if available.iter().any(|network| network.ssid == ssid) => Err(Error::NoPassword),
             None => Err(Error::NotFound),
         }
     }

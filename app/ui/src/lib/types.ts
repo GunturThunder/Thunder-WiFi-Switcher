@@ -81,3 +81,19 @@ export interface Saved {
 }
 
 export type Link = 'repo' | 'privacy' | 'issues' | 'location_settings'
+
+/** Why "Join now" failed (status.rs `JoinError`). */
+export type JoinProblem =
+  | 'not_in_range'
+  | 'no_password'
+  | 'wrong_password'
+  | 'needs_user_name'
+  | 'permission'
+  | 'wifi_off'
+  | 'timeout'
+  | 'other'
+
+export interface JoinError {
+  kind: JoinProblem
+  message: string
+}
