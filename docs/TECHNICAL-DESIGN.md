@@ -99,6 +99,7 @@ pub trait WifiBackend: Send + Sync {
 | Location permission | `CLLocationManager.requestWhenInUseAuthorization()` on the main thread, manager kept alive there; without permission SSIDs come back nil and the backend returns `PermissionDenied` |
 | Open at login | `SMAppService.mainApp` (Tauri autostart plugin uses it) |
 | Sleep / wake | `NSWorkspace` will-sleep / did-wake notifications (`SleepWatcher`) pause the engine |
+| Notification permission | `UNUserNotificationCenter`: `getNotificationSettings` to read it, `requestAuthorization` to ask; only inside a `.app` bundle |
 
 - Users add a network and its password once in Settings; macOS gives apps no access to the system's saved Wi-Fi passwords.
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
@@ -241,7 +242,7 @@ The tray menu is native (Tauri's tray + menu API); only the settings window is a
 
 **First run:** with no settings file (or no networks), the settings window opens on launch with a "Get started" card: allow Location, then add networks. A settings file that couldn't be read shows a one-time notice.
 
-**Other pieces:** open at login uses the Tauri autostart plugin's Launch Agent; a second launch just opens the settings window (single-instance plugin); logs go to `~/Library/Logs/ThunderWiFi/thunderwifi.log` (rotated at 5 MB, network names and signal only). `--simulate` swaps in the fake backend with three networks on a 6-minute loop and its own settings file.
+**Other pieces:** switch notifications (off by default) use the Tauri notification plugin from Rust only, so the window gets no notification permission. Only automatic switches notify ("Switched to Dorm-2.4" / "Dorm-5G's signal was weak (-81 dBm)."); switches the user made, and failed joins, don't. Turning the setting on sends a test notification, so the user sees one straight away, or learns that the system blocks them. macOS asks each app once whether it may show notifications; after Don't Allow they only go to Notification Center, and only System Settings can change that. The plugin can't tell, so on macOS the app reads and asks with `UNUserNotificationCenter` (`wifi-macos`, commands `notification_permission` and `ask_notification_permission`): it asks the moment the user ticks the box, and while notifications are on but blocked (denied, or banner style None) the General tab says so, with **Open notification settings** (the app's own page in System Settings → Notifications). It checks again whenever the window gets focus. That framework only works inside a real `.app`, so it isn't called anywhere else (the answer is then "unknown"). Windows has no such question: the tab just offers `ms-settings:notifications`. Open at login uses the Tauri autostart plugin's Launch Agent; a second launch just opens the settings window (single-instance plugin); logs go to `~/Library/Logs/ThunderWiFi/thunderwifi.log` (rotated at 5 MB, network names and signal only). `--simulate` swaps in the fake backend with three networks on a 6-minute loop and its own settings file.
 
 **Settings window** (about 480 × 560 px), four tabs:
 

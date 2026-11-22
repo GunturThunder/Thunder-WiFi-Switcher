@@ -17,7 +17,13 @@ npm run --silent tauri -- build --debug --bundles app
 
 APP="$(cd .. && pwd)/target/debug/bundle/macos/Thunder WiFi Switcher.app"
 # Quit a copy that's already running, so the new build (and flags) take effect.
-pkill -f "$APP/Contents/MacOS/" 2>/dev/null || true
+# Wait until it has closed: `open` fails (error -600) while it's still closing.
+if pkill -f "$APP/Contents/MacOS/" 2>/dev/null; then
+  for _ in $(seq 50); do
+    pgrep -f "$APP/Contents/MacOS/" >/dev/null || break
+    sleep 0.1
+  done
+fi
 open "$APP" --args "$@"
 
 echo
