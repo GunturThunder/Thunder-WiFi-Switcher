@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Release workflow: pushing a version tag builds the macOS `.dmg` (Apple Silicon and Intel) and Windows `.msi` (x64 and ARM64) and attaches them to a draft GitHub Release.
+- Install instructions in the README, and a manual release checklist in `docs/TESTING.md`.
 - Internet-quality checks: every 5 seconds the app pings your router, 1.1.1.1 and 8.8.8.8 (falling back to a port-443 connection when ping is blocked) and switches away from a network whose internet is down or slow, or whose router stops responding, even with a strong signal. A network left for bad internet is skipped for 10 minutes.
 - Ping in the menu bar label (`-58 · 24ms`), the menu and the settings window; "no internet" when the checks fail.
 - `ping` command in both probe tools; `--simulate` now includes an internet outage.
