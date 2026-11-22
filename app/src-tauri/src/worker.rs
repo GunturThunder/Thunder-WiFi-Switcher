@@ -16,7 +16,7 @@ use thunder_core::{
     Config, Driver, Error, Event, Notice, Quality, Sample, ScanResult, WifiBackend,
 };
 
-use crate::status::{InternetState, LastEvent, Status, notice_text};
+use crate::status::{Alert, InternetState, LastEvent, Status, notice_text};
 
 /// Something for the worker to do.
 pub enum Command {
@@ -47,12 +47,14 @@ pub struct Worker {
 
 impl Worker {
     /// Starts the worker. `on_status` runs on the worker thread whenever the
-    /// status changes.
+    /// status changes; `on_alert`, for each notification to show (only when
+    /// the user turned them on).
     pub fn spawn(
         config: Config,
         backend: Arc<dyn WifiBackend>,
         simulated: bool,
         on_status: impl Fn(&Status) + Send + 'static,
+        on_alert: impl Fn(&Alert) + Send + 'static,
     ) -> Self {
         let (tx, rx) = mpsc::channel();
         let mut driver = Driver::new(config, backend);
@@ -132,9 +134,13 @@ impl Worker {
                         }
                     };
 
+                    let notify = driver.engine().config().notify_on_switch;
                     for notice in &notices {
                         log::info!("{}", notice_text(notice));
                         last_event = Some(LastEvent::now(notice));
+                        if let Some(alert) = Alert::for_notice(notice).filter(|_| notify) {
+                            on_alert(&alert);
+                        }
                     }
                     if notices
                         .iter()
@@ -267,12 +273,29 @@ mod tests {
     }
 
     fn start(wifi: &Arc<FakeBackend>, config: Config) -> (Worker, Receiver<Status>) {
-        let (tx, rx) = mpsc::channel();
+        let (worker, updates, _alerts) = start_with_alerts(wifi, config);
+        (worker, updates)
+    }
+
+    fn start_with_alerts(
+        wifi: &Arc<FakeBackend>,
+        config: Config,
+    ) -> (Worker, Receiver<Status>, Receiver<Alert>) {
+        let (status_tx, status_rx) = mpsc::channel();
+        let (alert_tx, alert_rx) = mpsc::channel();
         let backend: Arc<dyn WifiBackend> = wifi.clone();
-        let worker = Worker::spawn(config, backend, true, move |status| {
-            let _ = tx.send(status.clone());
-        });
-        (worker, rx)
+        let worker = Worker::spawn(
+            config,
+            backend,
+            true,
+            move |status| {
+                let _ = status_tx.send(status.clone());
+            },
+            move |alert| {
+                let _ = alert_tx.send(alert.clone());
+            },
+        );
+        (worker, status_rx, alert_rx)
     }
 
     fn config(ssids: &[&str]) -> Config {
@@ -327,6 +350,34 @@ mod tests {
     }
 
     #[test]
+    fn notifies_about_automatic_switches_only_when_turned_on() {
+        let start_notifying = |on: bool| {
+            let wifi = Arc::new(FakeBackend::new());
+            wifi.set_network("Dorm-2.4", -65);
+            wifi.set_network("Dorm-5G", -75);
+            let config = Config {
+                notify_on_switch: on,
+                ..config(&["Dorm-5G", "Dorm-2.4"])
+            };
+            let (worker, updates, alerts) = start_with_alerts(&wifi, config);
+            // Not connected at first, so the app reconnects by itself.
+            wait_for(&updates, |s| s.last_event.is_some());
+            (worker, updates, alerts)
+        };
+
+        let (worker, updates, alerts) = start_notifying(true);
+        assert_eq!(alerts.try_recv().unwrap().title, "Reconnected to Dorm-2.4");
+        // A switch the user asked for: they know, so no notification.
+        worker.join("Dorm-5G".into()).unwrap();
+        wait_for(&updates, |s| s.ssid.as_deref() == Some("Dorm-5G"));
+        assert!(alerts.try_recv().is_err());
+
+        // Turned off: nothing, even for an automatic reconnect.
+        let (_worker, _updates, alerts) = start_notifying(false);
+        assert!(alerts.try_recv().is_err());
+    }
+
+    #[test]
     fn join_reports_whether_it_worked() {
         let wifi = Arc::new(FakeBackend::new());
         wifi.set_network("Dorm-5G", -58);
@@ -360,15 +411,21 @@ mod tests {
     fn pausing_shows_in_the_status() {
         let wifi = Arc::new(FakeBackend::new());
         let (worker, updates) = start(&wifi, config(&["A"]));
+        wait_for(&updates, |s| s.connection == Connection::Disconnected);
         worker.send(Command::SetConfig(Config {
             auto_switch: false,
             ..config(&["A"])
         }));
         wait_for(&updates, |s| s.activity == Activity::Paused);
+
+        // Still paused by the user after sleeping. A user pause shows the
+        // same through sleep, so no new status comes: ask for one instead,
+        // once the worker has handled both (commands run in order).
         worker.send(Command::Sleep);
-        // Still paused by the user while asleep.
         worker.send(Command::Wake);
-        let status = wait_for(&updates, |s| s.connection == Connection::Disconnected);
+        worker.scan().unwrap();
+        let status = worker.status();
         assert_eq!(status.activity, Activity::Paused);
+        assert_eq!(status.connection, Connection::Disconnected);
     }
 }
