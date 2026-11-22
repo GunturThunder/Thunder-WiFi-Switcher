@@ -5,14 +5,16 @@ import type { Api } from './api'
 import type { Config, JoinError, NotificationPermission, Status } from './types'
 
 export function createMockApi(): Api {
+  const query = new URLSearchParams(window.location.search)
   // `?platform=windows` previews the Windows version of the window.
-  const platform = new URLSearchParams(window.location.search).get('platform') ?? 'macos'
+  const platform = query.get('platform') ?? 'macos'
   const windows = platform === 'windows'
+  // `?firstrun` previews a fresh install: no networks, no permissions yet.
+  const firstRun = query.has('firstrun')
   // `?notifications=blocked` previews notifications turned off in System Settings.
   let notifications: NotificationPermission = windows
     ? 'unknown'
-    : ((new URLSearchParams(window.location.search).get('notifications') as NotificationPermission | null) ??
-      'not_asked')
+    : ((query.get('notifications') as NotificationPermission | null) ?? 'not_asked')
   let config: Config = {
     version: 1,
     auto_switch: true,
@@ -23,15 +25,17 @@ export function createMockApi(): Api {
     show_signal_label: true,
     language: 'en',
     ping_targets: ['1.1.1.1', '8.8.8.8'],
-    networks: [
-      { ssid: 'Dorm-5G', enabled: true },
-      { ssid: 'Dorm-2.4', enabled: true },
-    ],
+    networks: firstRun
+      ? []
+      : [
+          { ssid: 'Dorm-5G', enabled: true },
+          { ssid: 'Dorm-2.4', enabled: true },
+        ],
   }
   let status: Status = {
-    connection: 'connected',
-    ssid: 'Dorm-5G',
-    rssi: -58,
+    connection: firstRun ? 'permission_needed' : 'connected',
+    ssid: firstRun ? null : 'Dorm-5G',
+    rssi: firstRun ? null : -58,
     ping_ms: 24,
     loss_pct: 0,
     internet: 'good',
@@ -122,6 +126,9 @@ export function createMockApi(): Api {
     },
     nearbyNetworks: async () => {
       await delay(600)
+      if (status.permission !== 'granted') {
+        throw new Error('Location permission is needed to see Wi-Fi network names')
+      }
       return clone(nearby)
     },
     knownNetworks: async () => ['Dorm-5G', 'Dorm-2.4', 'Library', 'Home'],
@@ -139,7 +146,13 @@ export function createMockApi(): Api {
     },
     requestPermission: async () => {
       await delay(1000)
-      status = { ...status, permission: 'granted' }
+      status = {
+        ...status,
+        permission: 'granted',
+        connection: 'connected',
+        ssid: 'Dorm-5G',
+        rssi: -58,
+      }
       emitStatus()
     },
     notificationPermission: async () => notifications,
