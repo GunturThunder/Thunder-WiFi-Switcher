@@ -98,7 +98,7 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
 - **`lib.rs`:**
   - setup: load the config, pick the backend (`backend.rs`: real, simulated, or `Unsupported` on Linux), build the tray, spawn the worker, `app.manage(AppState)`, start the sleep watcher
   - `apply_config()`: every settings change goes through it (normalize, save, send to the worker, redraw the tray, emit `config`)
-- **`commands.rs`:** the only API the window can call. Passwords only travel into the Keychain, never back out. `open_link` only opens a fixed list of URLs.
+- **`commands.rs`:** the only API the window can call. Passwords only travel into the Keychain, never back out. `open_link` only opens a fixed list of URLs. `switch_to` ("Join now") waits for the worker's result and turns a failure into a `JoinError` (`status.rs`: a `kind` for the fix button plus a plain message).
 - **`simulate.rs`:** a 6-minute loop. Walking away gives a weak-signal switch; Dorm-2.4's internet outage gives a bad-internet switch.
 
 ### Settings window (`app/ui/src`)

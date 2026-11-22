@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Join now** in the settings window now says why joining failed, right under the network, and offers the fix: not in range, no password saved, wrong password, Location permission needed, Wi-Fi turned off, no answer in time, or a network that needs a user name (WPA Enterprise, which the app can't join yet). No pop-ups: the message hides itself after 5 seconds.
 - Release workflow: pushing a version tag builds the macOS `.dmg` (Apple Silicon and Intel) and Windows `.msi` (x64 and ARM64) and attaches them to a draft GitHub Release.
 - Install instructions in the README, and a manual release checklist in `docs/TESTING.md`.
 - Internet-quality checks: every 5 seconds the app pings your router, 1.1.1.1 and 8.8.8.8 (falling back to a port-443 connection when ping is blocked) and switches away from a network whose internet is down or slow, or whose router stops responding, even with a strong signal. A network left for bad internet is skipped for 10 minutes.

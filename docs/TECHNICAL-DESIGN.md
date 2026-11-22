@@ -82,7 +82,7 @@ pub trait WifiBackend: Send + Sync {
 ```
 
 - `Link` and `ScanResult` are plain structs in `thunder-core`; RSSI is always dBm. Windows reports signal as a 0–100% quality, so its backend uses the BSS list's `lRssi` value instead.
-- Errors are one enum (`PermissionDenied`, `NotFound`, `AuthFailed`, `Timeout`, `Os(String)`) so the UI can show a clear message.
+- Errors are one enum (`PermissionDenied`, `NotFound`, `AuthFailed`, `NoPassword`, `NeedsUserName`, `WifiOff`, `Timeout`, `Os(String)`) so the UI can show a clear message.
 
 ## macOS backend
 
@@ -92,7 +92,7 @@ pub trait WifiBackend: Send + Sync {
 | --- | --- |
 | Current link, RSSI | `CWWiFiClient.shared().interface()` → `ssid()`, `bssid()`, `rssiValue()`; RSSI 0 means not associated |
 | Scan | `scanForNetworksWithName(nil)` on a background thread |
-| Connect | Scan for that name, pick its strongest access point, `associateToNetwork(network, password)` |
+| Connect | Scan for that name, pick its strongest access point, `associateToNetwork(network, password)`. Nothing found but nameless results → `PermissionDenied`; an access point that only offers WPA Enterprise → `NeedsUserName` (the app can't send a user name yet); a password network with nothing in the Keychain is tried anyway, and a failure becomes `NoPassword` |
 | Known networks | macOS's Known Networks (`configuration().networkProfiles()`) plus networks with a password in the app's Keychain store |
 | Passwords | Keychain generic-password items, service `ThunderWiFi`, account = SSID (`PasswordStore`) |
 | Gateway | `Router` from the System Configuration key `State:/Network/Global/IPv4`, only when its `PrimaryInterface` is the Wi-Fi interface |
@@ -105,7 +105,7 @@ pub trait WifiBackend: Send + Sync {
 - Tauri signs the bundle with the hardened runtime, so `Entitlements.plist` must include `com.apple.security.personal-information.location`; without it macOS silently skips the Location prompt (locationd logs "has supported the hardened runtime but doesn't have the entitlement").
 - Ad-hoc signed builds trigger a Keychain prompt and lose Location permission after each rebuild; Developer ID signing removes both for releases.
 - macOS reports the Location permission state asynchronously, through a location manager on the main thread, so the backend keeps one alive there from startup. Whether names are hidden is judged from what CoreWLAN returns, not from that state.
-- CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`.
+- CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`. Saying no to the Keychain prompt gives an `Os` message that says to choose Always Allow.
 - macOS only shows the Location prompt to processes launched as apps. A binary started from Terminal (including `tauri dev`) is never asked, so real-Wi-Fi testing needs a bundled build opened with `open`.
 - `scripts/probe-macos.sh` exercises every backend call on real Wi-Fi without the app: it wraps the `probe` example in a small app bundle and launches it with `open`, with the terminal as its input and output.
 
@@ -119,7 +119,7 @@ pub trait WifiBackend: Send + Sync {
 | Current link | `WlanQueryInterface(wlan_intf_opcode_current_connection)`; `ERROR_INVALID_STATE` means not connected |
 | RSSI in dBm | `WlanGetNetworkBssList` → `lRssi` for the connected BSSID (0–100 signal quality only as a fallback); channel from `ulChCenterFrequency` |
 | Scan | `WlanScan`, then wait up to 5 s for `scan_complete` / `scan_fail` (`WlanRegisterNotification`); the BSS list is read either way |
-| Connect | Find the network's saved profile in `WlanGetAvailableNetworkList`, `WlanConnect` with `wlan_connection_mode_profile`, wait up to 20 s for `connection_complete` / `connection_attempt_fail`; reason codes from the security module map to `AuthFailed` |
+| Connect | Find the network's saved profile in `WlanGetAvailableNetworkList`, `WlanConnect` with `wlan_connection_mode_profile`, wait up to 20 s for `connection_complete` / `connection_attempt_fail`; reason codes from the security module map to `AuthFailed`; a network in range without a saved profile → `NoPassword` |
 | Known networks | `WlanGetProfileList` (Windows already stores the passwords) |
 | Radio on/off | `WlanQueryInterface(wlan_intf_opcode_radio_state)`: on only if both the switch and the setting are on |
 | Gateway | `GetIpForwardTable2(AF_INET)`: the default route of the Wi-Fi adapter's LUID with the lowest metric |
@@ -163,6 +163,7 @@ A candidate wins when it is a saved, enabled network in the scan and scores high
 - Each network is judged by its strongest access point in the scan.
 - Signal margin: at least 8 dBm stronger. When disconnected, any candidate will do.
 - A network that failed to connect is skipped for 10 minutes, so a wrong password doesn't block the next-best network.
+- Picking a network while Wi-Fi is off fails straight away with `WifiOff`, and nothing is skipped because of it.
 - When the problem is internet quality (`BadInternet` or `BadLink`), the current network is marked when the search starts and skipped for 10 minutes. Instead of the 8 dB margin, a candidate only needs a signal that isn't weak (at or above the weak-signal level). After joining, its quality is checked like any network: if it's bad too, it gets marked and the search continues; with nothing left, the engine backs off.
 - User priority breaks ties: higher in the list wins when two candidates are within 3 dBm of the strongest.
 
@@ -251,7 +252,7 @@ The tray menu is native (Tauri's tray + menu API); only the settings window is a
 | General | Open at login, notifications, language, show signal label |
 | About | Version, check for updates, links to GitHub and privacy note |
 
-The UI is built with Svelte + TypeScript for small bundle size; it talks to Rust through Tauri commands (`get_status`, `get_config`, `save_config`, `switch_to`, plus `nearby_networks`, `known_networks`, `password_status`, `set_password`, `delete_password`, `request_permission`, `open_link`, `get_autostart`, `set_autostart`, `app_info`, `startup_notice`) and listens for `status` and `config` events. Every change saves straight away. Passwords only travel from the window to the Keychain, never back. In a plain browser the window uses a pretend backend (`ui/src/lib/mock.ts`).
+The UI is built with Svelte + TypeScript for small bundle size; it talks to Rust through Tauri commands (`get_status`, `get_config`, `save_config`, `switch_to`, plus `nearby_networks`, `known_networks`, `password_status`, `set_password`, `delete_password`, `request_permission`, `open_link`, `get_autostart`, `set_autostart`, `app_info`, `startup_notice`) and listens for `status` and `config` events. Every change saves straight away. **Join now** calls `switch_to`, which waits (up to 90 s) for the worker to join; on failure it returns a `JoinError` (`kind` plus a plain message for this OS, from `status.rs`), shown under that network with a fix where there is one: add or change the password, allow Location, or try again. The message hides itself after 5 seconds, but not while the pointer or keyboard focus is on it. Passwords only travel from the window to the Keychain, never back. In a plain browser the window uses a pretend backend (`ui/src/lib/mock.ts`).
 
 ## Testing
 
