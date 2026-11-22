@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use objc2::rc::Retained;
-use objc2_core_wlan::{CWErr, CWInterface, CWNetwork, CWWiFiClient};
+use objc2_core_wlan::{CWErr, CWInterface, CWNetwork, CWSecurity, CWWiFiClient};
 use objc2_foundation::{NSError, NSString};
 use thunder_core::{Error, Link, Permission, Result, ScanResult, WifiBackend};
 
@@ -128,18 +128,43 @@ impl WifiBackend for MacBackend {
         // SAFETY: blocking scan for one network name.
         let found = retry_if_busy(|| unsafe { iface.scanForNetworksWithName_error(Some(&name)) })?;
         // The strongest access point with exactly this name.
-        let target = found
+        // SAFETY (here and below): plain CWNetwork getters.
+        let Some(target) = found
             .iter()
             .filter(|network| string(unsafe { network.ssid() }).as_deref() == Some(ssid))
             .max_by_key(|network| unsafe { network.rssiValue() })
-            .ok_or(Error::NotFound)?;
+        else {
+            // Without Location permission the scan works, but every name is
+            // missing (the same rule as `scan`).
+            let any = found.iter().next().is_some();
+            let nameless = found
+                .iter()
+                .all(|network| unsafe { network.ssid() }.is_none());
+            return Err(if any && nameless {
+                Error::PermissionDenied
+            } else {
+                Error::NotFound
+            });
+        };
 
-        // No stored password: try without one (open networks).
+        let security = Security::of(|kind| unsafe { target.supportsSecurity(kind) });
         let password = self.passwords.get(ssid)?.map(|p| NSString::from_str(&p));
         // SAFETY: blocks until associated or failed; called off the main thread.
-        retry_if_busy(|| unsafe {
-            iface.associateToNetwork_password_error(&target, password.as_deref())
-        })
+        let associate = || {
+            retry_if_busy(|| unsafe {
+                iface.associateToNetwork_password_error(&target, password.as_deref())
+            })
+        };
+        match (security, &password) {
+            (Security::UserName, _) => Err(Error::NeedsUserName),
+            // macOS might still join it with a password it knows itself; if
+            // not, the missing password is the problem, not the network.
+            (Security::Password, None) => associate().map_err(|err| match err {
+                Error::AuthFailed | Error::Os(_) => Error::NoPassword,
+                other => other,
+            }),
+            _ => associate(),
+        }
     }
 
     fn known_networks(&self) -> Result<Vec<String>> {
@@ -182,6 +207,51 @@ impl WifiBackend for MacBackend {
 
     fn ping(&self, addr: IpAddr, timeout: Duration) -> Result<Duration> {
         icmp::ping(addr, timeout)
+    }
+}
+
+/// What a network asks for when joining.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Security {
+    /// Nothing (open networks, including Enhanced Open).
+    Open,
+    /// A password (WEP, or WPA, WPA2 or WPA3 Personal).
+    Password,
+    /// A user name and a password (WPA Enterprise, 802.1X).
+    UserName,
+}
+
+impl Security {
+    const OPEN: [CWSecurity; 3] = [CWSecurity::None, CWSecurity::OWE, CWSecurity::OWETransition];
+    const PASSWORD: [CWSecurity; 7] = [
+        CWSecurity::WEP,
+        CWSecurity::WPAPersonal,
+        CWSecurity::WPAPersonalMixed,
+        CWSecurity::WPA2Personal,
+        CWSecurity::Personal,
+        CWSecurity::WPA3Personal,
+        CWSecurity::WPA3Transition,
+    ];
+    const USER_NAME: [CWSecurity; 6] = [
+        CWSecurity::DynamicWEP,
+        CWSecurity::WPAEnterprise,
+        CWSecurity::WPAEnterpriseMixed,
+        CWSecurity::WPA2Enterprise,
+        CWSecurity::Enterprise,
+        CWSecurity::WPA3Enterprise,
+    ];
+
+    /// Judged from the security types the access point supports. When it
+    /// offers several, the simplest wins. Nothing known counts as a password.
+    fn of(supports: impl Fn(CWSecurity) -> bool) -> Self {
+        let any = |kinds: &[CWSecurity]| kinds.iter().any(|kind| supports(*kind));
+        if any(&Self::OPEN) {
+            Self::Open
+        } else if any(&Self::USER_NAME) && !any(&Self::PASSWORD) {
+            Self::UserName
+        } else {
+            Self::Password
+        }
     }
 }
 
@@ -265,6 +335,35 @@ mod tests {
             classify("com.apple.coreWLAN.error", -3925, "x".into()),
             Error::Timeout
         );
+    }
+
+    #[test]
+    fn security_is_judged_from_what_the_access_point_supports() {
+        let only = |kinds: &'static [CWSecurity]| move |kind| kinds.contains(&kind);
+        assert_eq!(Security::of(only(&[CWSecurity::None])), Security::Open);
+        assert_eq!(Security::of(only(&[CWSecurity::OWE])), Security::Open);
+        assert_eq!(
+            Security::of(only(&[CWSecurity::WPA2Personal])),
+            Security::Password
+        );
+        assert_eq!(
+            Security::of(only(&[CWSecurity::WPA3Transition])),
+            Security::Password
+        );
+        assert_eq!(
+            Security::of(only(&[CWSecurity::WPA2Enterprise])),
+            Security::UserName
+        );
+        // An access point that takes both a password and a user name.
+        assert_eq!(
+            Security::of(only(&[
+                CWSecurity::WPA2Personal,
+                CWSecurity::WPA2Enterprise
+            ])),
+            Security::Password
+        );
+        // Unknown: try with the saved password, as before.
+        assert_eq!(Security::of(only(&[])), Security::Password);
     }
 
     #[test]
