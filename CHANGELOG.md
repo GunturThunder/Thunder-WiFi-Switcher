@@ -33,4 +33,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- The app no longer leaves a working network because of one lost ping, or because of lost pings in the first seconds after joining it or starting. Loss now needs at least 2 lost checks in 30 seconds, and the checks wait 10 seconds after joining. When the internet is judged bad, the log now shows what each server did.
 - Opening the settings window no longer makes macOS ask for your Keychain password once per saved network: the app now checks that a password is saved without reading it.
