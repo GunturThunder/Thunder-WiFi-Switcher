@@ -1,9 +1,15 @@
 name: Release
 
-# Pushing a version tag (v0.1.0, v0.5.0-beta.1, …) builds the installers and
+# Pushing a version tag (v0.5.0, v0.5.1-beta.2, …) builds the installers and
 # attaches them to a draft GitHub Release, which the maintainer reviews and
 # publishes. A pull request that changes this file builds the same installers
 # as workflow artifacts, without releasing anything, to prove packaging works.
+#
+# Updates: each build is also signed with the Tauri updater key (repository
+# secrets TAURI_SIGNING_PRIVATE_KEY and _PASSWORD), and the release gets a
+# latest.json that installed apps read to find the newest version. Releases
+# are never marked as pre-releases, because the apps look at the "latest"
+# release: a beta reaches testers when it has a higher version number.
 
 on:
   push:
@@ -28,7 +34,8 @@ jobs:
           - name: macOS (universal)
             os: macos-latest
             targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --bundles dmg
+            # The .app is what the updater downloads (as .app.tar.gz).
+            args: --target universal-apple-darwin --bundles app,dmg
           - name: Windows x64
             os: windows-latest
             targets: x86_64-pc-windows-msvc
@@ -69,13 +76,28 @@ jobs:
         working-directory: app
         run: npm ci
 
+      # Pull requests from Dependabot (or forks) can't see the secrets. They
+      # still build, just without signed update files.
+      - name: Skip update signing without the key
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            # Merged into tauri.conf.json; the path is relative to app/, where the build runs.
+            echo '{"bundle":{"createUpdaterArtifacts":false}}' > app/no-updater.json
+            echo "NO_UPDATER=--config no-updater.json" >> "$GITHUB_ENV"
+          fi
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
           tauriScript: npx tauri
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ env.NO_UPDATER }}
           # Only a tag push creates (or adds to) a release.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: Thunder WiFi Switcher ${{ github.ref_name }}
@@ -84,8 +106,10 @@ jobs:
             - **macOS** (Apple Silicon and Intel): the `.dmg`
             - **Windows** (most PCs): the `x64` `.msi`; on ARM laptops, the `arm64` `.msi`
 
-            These builds aren't signed yet, so macOS and Windows will warn you the first time. See [Install](https://github.com/GunturThunder/Thunder-WiFi-Switcher#install) for the one-time steps, and [CHANGELOG.md](https://github.com/GunturThunder/Thunder-WiFi-Switcher/blob/main/CHANGELOG.md) for what's new.
+            These builds aren't signed by Apple or Microsoft, so macOS and Windows will warn you the first time. See [Install](https://github.com/GunturThunder/Thunder-WiFi-Switcher#install) for the one-time steps, and [CHANGELOG.md](https://github.com/GunturThunder/Thunder-WiFi-Switcher/blob/main/CHANGELOG.md) for what's new.
+
+            Already installed? The app downloads this version by itself; choose **Restart to Update** in its menu.
           releaseDraft: true
-          # v0.1.0-alpha.1 and the like are marked as pre-releases.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          # Never a pre-release: installed apps only see the "latest" release.
+          prerelease: false
           uploadWorkflowArtifacts: true

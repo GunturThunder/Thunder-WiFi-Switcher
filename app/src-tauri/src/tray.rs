@@ -1,6 +1,8 @@
 //! The menu bar (macOS) / tray (Windows) icon and its menu.
 //!
 //! ```text
+//! Restart to Update to 0.5.1          (only while an update is ready)
+//! ─────────
 //! Connected: Dorm-5G · -58 dBm        (status, not clickable)
 //! 15:42 – Switched from Dorm-2.4 …    (last event, not clickable)
 //! ─────────
@@ -30,10 +32,17 @@ pub const MENU_SETTINGS: &str = "settings";
 pub const MENU_QUIT: &str = "quit";
 /// Prefix of the "Switch to" items; the rest is the network name.
 pub const MENU_SWITCH_PREFIX: &str = "switch:";
+/// Installs the downloaded update and restarts.
+pub const MENU_UPDATE: &str = "update";
 
 /// The tray icon plus the menu items that change.
 pub struct Tray {
     icon: TrayIcon,
+    menu: Menu<Wry>,
+    update_item: MenuItem<Wry>,
+    update_separator: PredefinedMenuItem<Wry>,
+    /// The version the update item offers, while it's in the menu.
+    update_shown: Mutex<Option<String>>,
     status_item: MenuItem<Wry>,
     event_item: MenuItem<Wry>,
     auto_switch: CheckMenuItem<Wry>,
@@ -104,8 +113,14 @@ impl Tray {
             .on_menu_event(move |app, event| on_menu(app, event.id().as_ref()))
             .build(app)?;
 
+        let update_item =
+            MenuItem::with_id(app, MENU_UPDATE, "Restart to Update", true, None::<&str>)?;
         let tray = Self {
             icon,
+            menu,
+            update_item,
+            update_separator: PredefinedMenuItem::separator(app)?,
+            update_shown: Mutex::new(None),
             status_item,
             event_item,
             auto_switch,
@@ -166,6 +181,34 @@ impl Tray {
             self.rebuild_switch_to(app, &targets, current.as_deref())?;
             shown.switch_targets = switch_targets;
         }
+        Ok(())
+    }
+
+    /// Shows "Restart to Update to <version>" at the top of the menu while an
+    /// update is ready, and removes it otherwise.
+    pub fn show_update(&self, version: Option<&str>) -> tauri::Result<()> {
+        let mut shown = self
+            .update_shown
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if shown.as_deref() == version {
+            return Ok(());
+        }
+        match version {
+            Some(version) => {
+                self.update_item
+                    .set_text(format!("Restart to Update to {version}"))?;
+                if shown.is_none() {
+                    self.menu.insert(&self.update_item, 0)?;
+                    self.menu.insert(&self.update_separator, 1)?;
+                }
+            }
+            None => {
+                self.menu.remove(&self.update_item)?;
+                self.menu.remove(&self.update_separator)?;
+            }
+        }
+        *shown = version.map(str::to_owned);
         Ok(())
     }
 

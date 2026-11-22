@@ -104,7 +104,7 @@ pub trait WifiBackend: Send + Sync {
 - Users add a network and its password once in Settings; macOS gives apps no access to the system's saved Wi-Fi passwords.
 - `Info.plist` needs `NSLocationWhenInUseUsageDescription` and `LSUIElement = true` (menu bar only, no Dock icon).
 - Tauri signs the bundle with the hardened runtime, so `Entitlements.plist` must include `com.apple.security.personal-information.location`; without it macOS silently skips the Location prompt (locationd logs "has supported the hardened runtime but doesn't have the entitlement").
-- Ad-hoc signed builds trigger a Keychain prompt and lose Location permission after each rebuild; Developer ID signing removes both for releases.
+- Ad-hoc signed builds trigger a Keychain prompt and lose Location permission after each rebuild, and releases do the same after each update: the app has no Apple Developer ID (decided in November 2026, to keep the project free). After an update, the settings window opens by itself with the setup guide.
 - macOS reports the Location permission state asynchronously, through a location manager on the main thread, so the backend keeps one alive there from startup. Whether names are hidden is judged from what CoreWLAN returns, not from that state.
 - CoreWLAN errors map to the core's `Error`: timeouts → `Timeout`; EAPOL, association-denied, challenge and PMK failures (usually a wrong password) → `AuthFailed`; anything else keeps macOS's message in `Os`. Saying no to the Keychain prompt gives an `Os` message that says to choose Always Allow.
 - macOS only shows the Location prompt to processes launched as apps. A binary started from Terminal (including `tauri dev`) is never asked, so real-Wi-Fi testing needs a bundled build opened with `open`.
@@ -201,6 +201,7 @@ weak_signal_dbm = -75
 bad_ping_ms = 300
 bad_loss_pct = 10
 notify_on_switch = false
+check_for_updates = true
 language = "en"            # "en" | "id"
 ping_targets = ["1.1.1.1", "8.8.8.8"]
 
@@ -259,7 +260,7 @@ Each step shows its state (Needed, Done, Turned off, On, Off, Blocked). The firs
 | --- | --- |
 | Networks | Saved list with drag-to-reorder, enable toggle, add/remove; on macOS a password field |
 | Rules | Weak-signal slider (-65 to -80), bad ping and loss values, ping targets |
-| General | Open at login, notifications, language, show signal label |
+| General | Open at login, notifications, check for updates, language, show signal label |
 | About | Version, check for updates, links to GitHub and privacy note |
 
 The UI is built with Svelte + TypeScript for small bundle size; it talks to Rust through Tauri commands (`get_status`, `get_config`, `save_config`, `switch_to`, plus `nearby_networks`, `known_networks`, `password_status`, `set_password`, `delete_password`, `request_permission`, `open_link`, `get_autostart`, `set_autostart`, `app_info`, `startup_notice`) and listens for `status` and `config` events. Every change saves straight away. **Join now** calls `switch_to`, which waits (up to 90 s) for the worker to join; on failure it returns a `JoinError` (`kind` plus a plain message for this OS, from `status.rs`), shown under that network with a fix where there is one: add or change the password, allow Location, or try again. The message hides itself after 5 seconds, but not while the pointer or keyboard focus is on it. Passwords only travel from the window to the Keychain, never back. In a plain browser the window uses a pretend backend (`ui/src/lib/mock.ts`).
@@ -285,13 +286,17 @@ GitHub Actions builds every pull request and attaches installers to a draft rele
 | Workflow | Trigger | Does |
 | --- | --- | --- |
 | `ci.yml` | Pushes to `main` and every pull request | `cargo fmt`, `clippy`, tests on Linux, macOS, Windows; builds the app on macOS and Windows |
-| `release.yml` | Tag `v*`; pull requests that change it | `tauri-action` builds a universal macOS .dmg and Windows .msi (x64, ARM64). A tag creates a draft GitHub Release (a pre-release if the tag has a label, like `v0.5.0-beta.1`) and stops if the tag doesn't match the `Cargo.toml` version; a pull request only uploads the installers as workflow artifacts |
+| `release.yml` | Tag `v*`; pull requests that change it | `tauri-action` builds a universal macOS .dmg and Windows .msi (x64, ARM64). A tag creates a draft GitHub Release, never marked as a pre-release (installed apps only see the latest release), with signed update files and `latest.json`; it stops if the tag doesn't match the `Cargo.toml` version. A pull request only uploads the installers as workflow artifacts |
 
-- The `Cargo.toml` version stays plain numbers, because MSI versions can't carry labels; a tag's `-label` only marks the release as a pre-release.
-- macOS signing and notarization: Developer ID certificate and Apple ID app password as repository secrets. Until then, release builds are ad-hoc signed (`signingIdentity: "-"`, with the location entitlement), and the README explains the one-time **Open Anyway** step.
+- The `Cargo.toml` version stays plain numbers, because MSI versions can't carry labels. Every release that should reach installed apps needs a higher version (0.5.0, 0.5.1, …), betas included. A tag may carry a label for people (`v0.5.1-beta.2`), but the updater only compares versions.
+- macOS: no Apple Developer ID, so no notarization. Release builds are ad-hoc signed (`signingIdentity: "-"`, with the location entitlement), the README explains the one-time **Open Anyway** step, and each update makes macOS ask for Location (and the Keychain) again.
 - Windows signing: SignPath's free open-source plan, called from `release.yml`.
-- Auto-update: Tauri updater plugin reads `latest.json` from GitHub Releases; update files are signed with a Tauri key kept in secrets.
-- Distribution after v1.0: Homebrew cask and winget manifest, both updated by a workflow step.
+- Auto-update (`updates.rs`, Tauri updater plugin):
+  - The app reads `latest.json` from the latest GitHub Release a minute after starting, then twice a day (by the clock, so time asleep counts) while **Check for updates automatically** is on, and whenever the user clicks About → **Check for updates**. GitHub answering "not found" (nothing published yet, or no build for this computer) counts as up to date; only a network problem or a broken file shows an error.
+  - A newer version downloads in the background. It installs only when the user chooses **Restart to Update** (top of the menu, or About). macOS: the new `.app` replaces the old one and the app restarts. Windows: the `.msi` installs in passive mode (a progress bar) and reopens the app.
+  - `release.yml` signs the update files with the Tauri key (secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); the public key is in `tauri.conf.json`, and the app refuses files that don't match. Builds without the key (`run-app-macos.sh`, pull requests from Dependabot) pass `--config` with `createUpdaterArtifacts: false`.
+  - When an update makes macOS forget Location, the first status that says so opens the settings window, where the setup guide waits.
+- Distribution after v1.0: our own Homebrew tap (the official homebrew-cask disables apps that fail macOS's Gatekeeper check from September 2026) and a winget manifest, both updated by a workflow step.
 - Versioning: SemVer; `CHANGELOG.md` follows Keep a Changelog.
 
 ## Security and privacy

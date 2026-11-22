@@ -141,7 +141,7 @@
             </p>
           {/if}
           {#if !isWindows}
-            <p class="small">Until the app is signed by Apple, macOS may ask again after an update.</p>
+            <p class="small">The app isn't signed by Apple, so macOS asks again after each update.</p>
           {/if}
         </div>
       {/if}
@@ -167,7 +167,7 @@
                 confidential information stored in ‘ThunderWiFi’ in your keychain.</q> Type your Mac password and
               choose <strong>Always Allow</strong>.
             </p>
-            <p class="small">Until the app is signed by Apple, macOS may ask again after an update.</p>
+            <p class="small">The app isn't signed by Apple, so macOS asks again after each update.</p>
           {/if}
         </div>
       {/if}

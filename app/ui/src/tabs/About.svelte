@@ -2,6 +2,10 @@
   import appIcon from '../../../../assets/icons/thunder-wifi-macos.svg'
   import { api } from '../lib/api'
   import { app } from '../lib/store.svelte'
+
+  let update = $derived(app.update)
+  let isWindows = $derived(app.info?.platform === 'windows')
+  let busy = $derived(update.state === 'checking' || update.state === 'downloading')
 </script>
 
 <div class="about">
@@ -20,10 +24,28 @@
     <button type="button" class="link" onclick={() => app.openSetup()}>Setup guide</button>
     · what the app asks for, and why
   </p>
-  <p class="hint">
-    Free and open source under the MIT license. Automatic updates arrive with v1.0; until then, new versions
-    are on GitHub.
-  </p>
+  <section class="updates" aria-live="polite">
+    {#if update.state === 'checking'}
+      <p>Checking for updates…</p>
+    {:else if update.state === 'downloading'}
+      <p>Downloading version {update.version}…{update.percent !== null ? ` ${update.percent}%` : ''}</p>
+    {:else if update.state === 'ready'}
+      <p><strong>Version {update.version} is ready.</strong> It installs when the app restarts.</p>
+      {#if !isWindows}
+        <p class="hint">The app isn't signed by Apple, so macOS asks for Location again afterwards. The setup guide opens to help.</p>
+      {/if}
+      <button type="button" class="primary" onclick={() => app.installUpdate()}>Restart to update</button>
+    {:else}
+      {#if update.state === 'up_to_date'}
+        <p>You have the newest version.</p>
+      {:else if update.state === 'failed'}
+        <p class="error">{update.message}</p>
+      {/if}
+      <button type="button" onclick={() => app.checkForUpdates()} disabled={busy}>Check for updates</button>
+    {/if}
+  </section>
+
+  <p class="hint">Free and open source under the MIT license.</p>
 </div>
 
 <style>
@@ -41,6 +63,22 @@
     margin-top: 0;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+
+  .updates {
+    margin: 16px auto;
+    padding: 10px 12px;
+    max-width: 360px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .updates p {
+    margin: 0 0 8px;
+  }
+
+  .updates .error {
+    color: var(--danger);
   }
 
   .links {

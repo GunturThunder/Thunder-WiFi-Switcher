@@ -5,7 +5,17 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { createMockApi } from './mock'
-import type { AppInfo, Config, JoinError, Link, Nearby, NotificationPermission, Saved, Status } from './types'
+import type {
+  AppInfo,
+  Config,
+  JoinError,
+  Link,
+  Nearby,
+  NotificationPermission,
+  Saved,
+  Status,
+  UpdateStatus,
+} from './types'
 
 export interface Api {
   appInfo(): Promise<AppInfo>
@@ -27,7 +37,13 @@ export interface Api {
   getAutostart(): Promise<boolean>
   setAutostart(enabled: boolean): Promise<void>
   startupNotice(): Promise<string | null>
+  updateStatus(): Promise<UpdateStatus>
+  /** Looks for a new version now and downloads it. */
+  checkForUpdates(): Promise<UpdateStatus>
+  /** Installs the downloaded update and restarts the app. */
+  installUpdate(): Promise<void>
   onStatus(callback: (status: Status) => void): Promise<UnlistenFn>
+  onUpdate(callback: (update: UpdateStatus) => void): Promise<UnlistenFn>
   onConfig(callback: (config: Config) => void): Promise<UnlistenFn>
 }
 
@@ -52,7 +68,11 @@ const tauriApi: Api = {
   getAutostart: () => invoke('get_autostart'),
   setAutostart: (enabled) => invoke('set_autostart', { enabled }),
   startupNotice: () => invoke('startup_notice'),
+  updateStatus: () => invoke('update_status'),
+  checkForUpdates: () => invoke('check_for_updates'),
+  installUpdate: () => invoke('install_update'),
   onStatus: (callback) => listen<Status>('status', (event) => callback(event.payload)),
+  onUpdate: (callback) => listen<UpdateStatus>('update', (event) => callback(event.payload)),
   onConfig: (callback) => listen<Config>('config', (event) => callback(event.payload)),
 }
 

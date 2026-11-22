@@ -58,6 +58,9 @@ pub struct Config {
     pub notify_on_switch: bool,
     /// Show the signal (and later ping) next to the menu bar icon.
     pub show_signal_label: bool,
+    /// Look for a new version on GitHub now and then, and download it.
+    /// Installing always waits for the user.
+    pub check_for_updates: bool,
     /// Interface language.
     pub language: Language,
     /// Public servers used to check the internet connection.
@@ -140,6 +143,7 @@ impl Default for Config {
             bad_loss_pct: 10,
             notify_on_switch: false,
             show_signal_label: true,
+            check_for_updates: true,
             language: Language::En,
             ping_targets: default_ping_targets(),
             networks: Vec::new(),
@@ -269,6 +273,8 @@ impl Config {
                 .unwrap_or(defaults.notify_on_switch),
             show_signal_label: field(&table, "show_signal_label", &mut notes)
                 .unwrap_or(defaults.show_signal_label),
+            check_for_updates: field(&table, "check_for_updates", &mut notes)
+                .unwrap_or(defaults.check_for_updates),
             language: field(&table, "language", &mut notes).unwrap_or(defaults.language),
             ping_targets: ping_targets(&table, &mut notes).unwrap_or(defaults.ping_targets),
             networks: networks(&table, &mut notes),
@@ -362,6 +368,7 @@ const KNOWN_KEYS: &[&str] = &[
     "bad_loss_pct",
     "notify_on_switch",
     "show_signal_label",
+    "check_for_updates",
     "language",
     "ping_targets",
     "networks",
@@ -455,6 +462,7 @@ weak_signal_dbm = -75
 bad_ping_ms = 300
 bad_loss_pct = 10
 notify_on_switch = false
+check_for_updates = true
 language = "en"            # "en" | "id"
 ping_targets = ["1.1.1.1", "8.8.8.8"]
 
@@ -480,6 +488,7 @@ enabled = true
         assert_eq!(config.bad_loss_pct, 10);
         assert!(!config.notify_on_switch);
         assert!(config.show_signal_label);
+        assert!(config.check_for_updates);
         assert_eq!(config.language, Language::En);
         assert_eq!(
             config.ping_targets,
@@ -517,6 +526,7 @@ enabled = true
             bad_loss_pct: 5,
             notify_on_switch: true,
             show_signal_label: false,
+            check_for_updates: false,
             language: Language::Id,
             ping_targets: vec!["9.9.9.9".parse().unwrap()],
             networks: vec![
