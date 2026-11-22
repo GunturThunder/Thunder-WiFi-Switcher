@@ -5,13 +5,14 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { createMockApi } from './mock'
-import type { AppInfo, Config, Link, Nearby, Saved, Status } from './types'
+import type { AppInfo, Config, JoinError, Link, Nearby, Saved, Status } from './types'
 
 export interface Api {
   appInfo(): Promise<AppInfo>
   getStatus(): Promise<Status>
   getConfig(): Promise<Config>
   saveConfig(config: Config): Promise<Saved>
+  /** Joins a network. Fails with a {@link JoinError}. */
   switchTo(ssid: string): Promise<void>
   nearbyNetworks(): Promise<Nearby[]>
   knownNetworks(): Promise<string[]>
@@ -32,7 +33,10 @@ const tauriApi: Api = {
   getStatus: () => invoke('get_status'),
   getConfig: () => invoke('get_config'),
   saveConfig: (config) => invoke('save_config', { config }),
-  switchTo: (ssid) => invoke('switch_to', { ssid }),
+  switchTo: (ssid) =>
+    invoke<void>('switch_to', { ssid }).catch((err: unknown) => {
+      throw asJoinError(ssid, err)
+    }),
   nearbyNetworks: () => invoke('nearby_networks'),
   knownNetworks: () => invoke('known_networks'),
   passwordStatus: (ssids) => invoke('password_status', { ssids }),
@@ -45,6 +49,14 @@ const tauriApi: Api = {
   startupNotice: () => invoke('startup_notice'),
   onStatus: (callback) => listen<Status>('status', (event) => callback(event.payload)),
   onConfig: (callback) => listen<Config>('config', (event) => callback(event.payload)),
+}
+
+/** The app sends a JoinError; anything else (a broken call) becomes one. */
+function asJoinError(ssid: string, err: unknown): JoinError {
+  if (typeof err === 'object' && err !== null && 'kind' in err && 'message' in err) {
+    return err as JoinError
+  }
+  return { kind: 'other', message: `Couldn't join ${ssid}: ${err}` }
 }
 
 /** True inside the app; false in a plain browser preview. */

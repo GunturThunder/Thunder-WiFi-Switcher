@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
 
   import { api } from '../lib/api'
   import GetStarted from '../lib/GetStarted.svelte'
   import { app } from '../lib/store.svelte'
-  import type { Nearby } from '../lib/types'
+  import type { JoinError, Nearby } from '../lib/types'
 
   let networks = $derived(app.config?.networks ?? [])
   let current = $derived(app.status?.connection === 'connected' ? app.status.ssid : null)
   let editable = $derived(app.info?.passwords_editable ?? false)
+  let isMac = $derived(app.info?.platform === 'macos')
 
   let saved = $state<Record<string, boolean>>({})
   let editing = $state<string | null>(null)
@@ -18,6 +19,12 @@
   let known = $state<string[]>([])
   let scanning = $state(false)
   let scanError = $state<string | null>(null)
+  let joining = $state<string | null>(null)
+  // Why the last "Join now" failed, per network. Each one hides itself after
+  // a few seconds, but not while the pointer or keyboard focus is on it.
+  const JOIN_ERROR_MS = 5000
+  let joinErrors = $state<Record<string, JoinError>>({})
+  const joinErrorTimers = new Map<string, ReturnType<typeof setTimeout>>()
   let dragFrom = $state<number | null>(null)
   let dropAt = $state<number | null>(null)
 
@@ -53,6 +60,48 @@
     }
   }
 
+  async function join(ssid: string) {
+    joining = ssid
+    clearJoinError(ssid)
+    try {
+      await api.switchTo(ssid)
+      app.flash('info', `Joined ${ssid}.`)
+    } catch (err) {
+      joinErrors = { ...joinErrors, [ssid]: err as JoinError }
+      hideJoinErrorLater(ssid)
+    } finally {
+      joining = null
+    }
+  }
+
+  function hideJoinErrorLater(ssid: string) {
+    keepJoinError(ssid)
+    joinErrorTimers.set(ssid, setTimeout(() => clearJoinError(ssid), JOIN_ERROR_MS))
+  }
+
+  function keepJoinError(ssid: string) {
+    clearTimeout(joinErrorTimers.get(ssid))
+    joinErrorTimers.delete(ssid)
+  }
+
+  function clearJoinError(ssid: string) {
+    keepJoinError(ssid)
+    const { [ssid]: _, ...rest } = joinErrors
+    joinErrors = rest
+  }
+
+  onDestroy(() => joinErrorTimers.forEach((timer) => clearTimeout(timer)))
+
+  async function allowLocation() {
+    try {
+      // macOS shows its prompt only once; after a "Don't Allow", open settings.
+      if (isMac && app.status?.permission !== 'denied') await api.requestPermission()
+      else await api.openLink('location_settings')
+    } catch (err) {
+      app.flash('error', `Couldn't open Location settings: ${err}`)
+    }
+  }
+
   function move(from: number, to: number) {
     if (to < 0 || to >= networks.length || from === to) return
     app.save((config) => {
@@ -73,6 +122,7 @@
     })
     if (editable) await api.deletePassword(ssid).catch(() => {})
     if (editing === ssid) editing = null
+    clearJoinError(ssid)
   }
 
   async function add(name: string) {
@@ -94,6 +144,11 @@
     password = ''
   }
 
+  // Puts the cursor in the password field when it opens.
+  function focus(input: HTMLInputElement) {
+    input.focus()
+  }
+
   async function savePassword(event: SubmitEvent) {
     event.preventDefault()
     if (!editing) return
@@ -103,6 +158,7 @@
       saved = { ...saved, [ssid]: password !== '' }
       app.flash('info', password ? `Saved the password for ${ssid}.` : `${ssid} saved as an open network.`)
       editing = null
+      clearJoinError(ssid)
     } catch (err) {
       app.flash('error', String(err))
     } finally {
@@ -117,6 +173,7 @@
       saved = { ...saved, [ssid]: false }
       app.flash('info', `${ssid} saved as an open network.`)
       editing = null
+      clearJoinError(ssid)
     } catch (err) {
       app.flash('error', String(err))
     }
@@ -176,8 +233,12 @@
               <span class="meta">
                 {#if current === network.ssid}
                   <span class="badge">Connected</span>
+                {:else if joining === network.ssid}
+                  <span class="joining">Joining…</span>
                 {:else if network.enabled}
-                  <button type="button" class="link" onclick={() => api.switchTo(network.ssid)}>Join now</button>
+                  <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
+                    Join now
+                  </button>
                 {/if}
                 {#if editable}
                   <span class="sep">·</span>
@@ -194,10 +255,41 @@
               <button type="button" class="icon danger" onclick={() => remove(network.ssid)} aria-label="Remove {network.ssid}" title="Remove (and its saved password)">✕</button>
             </div>
           </div>
+          {#if joinErrors[network.ssid] && current !== network.ssid}
+            {@const problem = joinErrors[network.ssid]}
+            <div
+              class="join-error"
+              role="alert"
+              onmouseenter={() => keepJoinError(network.ssid)}
+              onmouseleave={() => hideJoinErrorLater(network.ssid)}
+              onfocusin={() => keepJoinError(network.ssid)}
+              onfocusout={() => hideJoinErrorLater(network.ssid)}
+            >
+              <p>{problem.message}</p>
+              <div class="fixes">
+                {#if editable && problem.kind === 'no_password' && editing !== network.ssid}
+                  <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Add password</button>
+                {:else if editable && problem.kind === 'wrong_password' && editing !== network.ssid}
+                  <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Change password</button>
+                {:else if problem.kind === 'permission'}
+                  <button type="button" class="link" onclick={allowLocation}>
+                    {isMac ? 'Allow Location' : 'Open Location settings'}
+                  </button>
+                {/if}
+                {#if problem.kind !== 'needs_user_name'}
+                  <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
+                    Try again
+                  </button>
+                {/if}
+                <button type="button" class="link" onclick={() => clearJoinError(network.ssid)}>Dismiss</button>
+              </div>
+            </div>
+          {/if}
           {#if editing === network.ssid}
             <form class="password" onsubmit={savePassword}>
               <input
                 type="password"
+                use:focus
                 bind:value={password}
                 placeholder="Wi-Fi password for {network.ssid}"
                 autocomplete="off"
@@ -340,6 +432,29 @@
   .actions {
     display: flex;
     gap: 2px;
+  }
+
+  .joining {
+    font-style: italic;
+  }
+
+  .join-error {
+    margin: 0 10px 10px 38px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 12px;
+  }
+
+  .join-error p {
+    margin: 0 0 4px;
+  }
+
+  .fixes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .password {

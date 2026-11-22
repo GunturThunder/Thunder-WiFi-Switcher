@@ -6,10 +6,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_opener::OpenerExt as _;
-use thunder_core::Config;
+use thunder_core::{Config, Error};
 
-use crate::status::Status;
-use crate::worker::Command;
+use crate::status::{JoinError, Status};
 use crate::{AppState, apply_config};
 
 type CommandResult<T> = Result<T, String>;
@@ -62,9 +61,15 @@ pub fn save_config(app: AppHandle, config: Config) -> CommandResult<Saved> {
     Ok(Saved { config, notes })
 }
 
+/// Joins a network ("Join now") and waits, so the window can say what went
+/// wrong and how to fix it.
 #[tauri::command]
-pub fn switch_to(state: State<'_, AppState>, ssid: String) {
-    state.worker.send(Command::SwitchTo(ssid));
+pub async fn switch_to(app: AppHandle, ssid: String) -> Result<(), JoinError> {
+    let wanted = ssid.clone();
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().worker.join(wanted))
+        .await
+        .unwrap_or_else(|err| Err(Error::Os(err.to_string())))
+        .map_err(|err| JoinError::new(&ssid, &err))
 }
 
 /// A network in range: its strongest access point.

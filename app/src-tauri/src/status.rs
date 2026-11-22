@@ -331,6 +331,106 @@ pub fn notice_text(notice: &Notice) -> String {
     }
 }
 
+/// Why joining a network from the settings window failed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JoinError {
+    /// The kind of problem, so the window can offer the right fix.
+    pub kind: JoinProblem,
+    /// What went wrong and what to do, in plain words.
+    pub message: String,
+}
+
+/// The kinds of [`JoinError`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JoinProblem {
+    NotInRange,
+    NoPassword,
+    WrongPassword,
+    NeedsUserName,
+    Permission,
+    WifiOff,
+    Timeout,
+    Other,
+}
+
+impl JoinError {
+    /// Explains why joining `ssid` failed, for this computer's OS.
+    pub fn new(ssid: &str, error: &Error) -> Self {
+        Self::explain(ssid, error, cfg!(windows))
+    }
+
+    fn explain(ssid: &str, error: &Error, windows: bool) -> Self {
+        use JoinProblem as P;
+        let (kind, message) = match error {
+            Error::NotFound => (
+                P::NotInRange,
+                format!(
+                    "{ssid} isn't in range right now. Move closer to its router, or check that \
+                     the name is spelled exactly right."
+                ),
+            ),
+            Error::NoPassword if windows => (
+                P::NoPassword,
+                format!(
+                    "Windows hasn't saved a password for {ssid}. Connect to it once from the \
+                     Windows Wi-Fi menu, then try again."
+                ),
+            ),
+            Error::NoPassword => (
+                P::NoPassword,
+                format!("No password is saved for {ssid}. Add it, then try again."),
+            ),
+            Error::AuthFailed if windows => (
+                P::WrongPassword,
+                format!(
+                    "{ssid} didn't accept the connection. If its password changed, forget it in \
+                     Windows Wi-Fi settings and connect again from the Wi-Fi menu."
+                ),
+            ),
+            Error::AuthFailed => (
+                P::WrongPassword,
+                format!(
+                    "{ssid} didn't accept the connection. The saved password may be wrong: \
+                     change it, then try again."
+                ),
+            ),
+            Error::NeedsUserName => (
+                P::NeedsUserName,
+                format!(
+                    "{ssid} needs a user name as well as a password (WPA Enterprise). The app \
+                     can't join these yet: join it from the macOS Wi-Fi menu."
+                ),
+            ),
+            Error::PermissionDenied if windows => (
+                P::Permission,
+                "Windows hides Wi-Fi networks while location is off for desktop apps. Turn it \
+                 on, then try again."
+                    .to_owned(),
+            ),
+            Error::PermissionDenied => (
+                P::Permission,
+                "macOS only shows Wi-Fi networks to apps with Location permission. Allow it, \
+                 then try again."
+                    .to_owned(),
+            ),
+            Error::WifiOff => (
+                P::WifiOff,
+                "Wi-Fi is turned off. Turn it on, then try again.".to_owned(),
+            ),
+            Error::Timeout => (
+                P::Timeout,
+                format!(
+                    "{ssid} didn't answer in time. It may be too far away or busy: try again in \
+                     a moment."
+                ),
+            ),
+            Error::Os(message) => (P::Other, format!("Couldn't join {ssid}: {message}")),
+        };
+        Self { kind, message }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,5 +638,53 @@ mod tests {
             }),
             "Couldn't join B: the network rejected the connection (wrong password?)"
         );
+    }
+
+    #[test]
+    fn join_errors_say_what_to_do_on_each_os() {
+        let mac = |error| JoinError::explain("Kos-2", &error, false);
+        let windows = |error| JoinError::explain("Kos-2", &error, true);
+
+        assert_eq!(mac(Error::NotFound).kind, JoinProblem::NotInRange);
+        assert!(
+            mac(Error::NotFound)
+                .message
+                .starts_with("Kos-2 isn't in range")
+        );
+
+        assert_eq!(mac(Error::NoPassword).kind, JoinProblem::NoPassword);
+        assert!(mac(Error::NoPassword).message.contains("Add it"));
+        assert!(
+            windows(Error::NoPassword)
+                .message
+                .contains("Windows Wi-Fi menu")
+        );
+
+        assert_eq!(mac(Error::AuthFailed).kind, JoinProblem::WrongPassword);
+        assert!(mac(Error::AuthFailed).message.contains("change it"));
+        assert!(
+            windows(Error::AuthFailed)
+                .message
+                .contains("Windows Wi-Fi settings")
+        );
+
+        assert_eq!(mac(Error::NeedsUserName).kind, JoinProblem::NeedsUserName);
+        assert_eq!(mac(Error::PermissionDenied).kind, JoinProblem::Permission);
+        assert!(
+            mac(Error::PermissionDenied)
+                .message
+                .contains("Location permission")
+        );
+        assert!(
+            windows(Error::PermissionDenied)
+                .message
+                .contains("location is off")
+        );
+        assert_eq!(mac(Error::WifiOff).kind, JoinProblem::WifiOff);
+        assert_eq!(mac(Error::Timeout).kind, JoinProblem::Timeout);
+
+        let other = mac(Error::Os("Resource busy".into()));
+        assert_eq!(other.kind, JoinProblem::Other);
+        assert_eq!(other.message, "Couldn't join Kos-2: Resource busy");
     }
 }

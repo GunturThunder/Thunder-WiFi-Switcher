@@ -29,8 +29,12 @@ pub enum Command {
     /// The computer woke up.
     #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
     Wake,
-    /// The user picked a network in the menu.
-    SwitchTo(String),
+    /// The user picked a network: in the menu (no reply), or with "Join now"
+    /// in the settings window, which waits for the result.
+    SwitchTo {
+        ssid: String,
+        reply: Option<Sender<Result<(), Error>>>,
+    },
     /// Scan now and send the results back (settings window).
     Scan(Sender<Result<Vec<ScanResult>, Error>>),
 }
@@ -90,9 +94,14 @@ impl Worker {
                             next_tick = Instant::now();
                             driver.handle(now, Event::Wake)
                         }
-                        Ok(Command::SwitchTo(ssid)) => {
+                        Ok(Command::SwitchTo { ssid, reply }) => {
                             log::info!("user asked to switch to {ssid}");
-                            driver.handle(now, Event::UserSwitch { ssid })
+                            let notices =
+                                driver.handle(now, Event::UserSwitch { ssid: ssid.clone() });
+                            if let Some(reply) = reply {
+                                let _ = reply.send(join_result(&ssid, &notices));
+                            }
+                            notices
                         }
                         Ok(Command::Scan(reply)) => {
                             let _ = reply.send(driver.backend().scan());
@@ -183,6 +192,35 @@ impl Worker {
         rx.recv_timeout(Duration::from_secs(30))
             .map_err(|_| Error::Timeout)?
     }
+
+    /// Joins a network on the worker thread and waits for the result.
+    pub fn join(&self, ssid: String) -> Result<(), Error> {
+        let (tx, rx) = mpsc::channel();
+        self.send(Command::SwitchTo {
+            ssid,
+            reply: Some(tx),
+        });
+        rx.recv_timeout(JOIN_WAIT).map_err(|_| Error::Timeout)?
+    }
+}
+
+/// How long "Join now" waits. Joining takes up to about 20 seconds, and macOS
+/// may first ask the user to allow reading the password from the Keychain.
+const JOIN_WAIT: Duration = Duration::from_secs(90);
+
+/// Whether joining `ssid` worked, from what the engine reported. Nothing to
+/// report means it was already the current network.
+fn join_result(ssid: &str, notices: &[Notice]) -> Result<(), Error> {
+    notices
+        .iter()
+        .find_map(|notice| match notice {
+            Notice::ConnectFailed {
+                ssid: failed,
+                error,
+            } if failed == ssid => Some(Err(error.clone())),
+            _ => None,
+        })
+        .unwrap_or(Ok(()))
 }
 
 /// Logs connection and activity changes (not every signal reading). When the
@@ -280,9 +318,32 @@ mod tests {
         let (worker, updates) = start(&wifi, config(&["Dorm-5G", "Dorm-2.4"]));
         wait_for(&updates, |s| s.connection == Connection::Connected);
 
-        worker.send(Command::SwitchTo("Dorm-2.4".into()));
+        worker.send(Command::SwitchTo {
+            ssid: "Dorm-2.4".into(),
+            reply: None,
+        });
         let status = wait_for(&updates, |s| s.ssid.as_deref() == Some("Dorm-2.4"));
         assert_eq!(status.last_event.unwrap().text, "Switched to Dorm-2.4");
+    }
+
+    #[test]
+    fn join_reports_whether_it_worked() {
+        let wifi = Arc::new(FakeBackend::new());
+        wifi.set_network("Dorm-5G", -58);
+        wifi.set_network("Dorm-2.4", -70);
+        wifi.join("Dorm-5G");
+        wifi.fail_connect("Dorm-2.4", Error::NoPassword);
+        let (worker, updates) = start(&wifi, config(&["Dorm-5G", "Dorm-2.4", "Library"]));
+        wait_for(&updates, |s| s.connection == Connection::Connected);
+
+        assert_eq!(worker.join("Dorm-2.4".into()), Err(Error::NoPassword));
+        assert_eq!(worker.join("Library".into()), Err(Error::NotFound));
+        // Already there: nothing to do, and nothing went wrong.
+        assert_eq!(worker.join("Dorm-5G".into()), Ok(()));
+
+        wifi.set_powered(false);
+        wait_for(&updates, |s| s.connection == Connection::Off);
+        assert_eq!(worker.join("Dorm-2.4".into()), Err(Error::WifiOff));
     }
 
     #[test]
