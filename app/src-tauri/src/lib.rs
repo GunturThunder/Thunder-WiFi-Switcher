@@ -135,6 +135,8 @@ pub fn run() {
             commands::set_password,
             commands::delete_password,
             commands::request_permission,
+            commands::notification_permission,
+            commands::ask_notification_permission,
             commands::open_link,
             commands::get_autostart,
             commands::set_autostart,

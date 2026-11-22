@@ -2,12 +2,17 @@
 // (`npm run dev`). Nothing here talks to real Wi-Fi.
 
 import type { Api } from './api'
-import type { Config, JoinError, Status } from './types'
+import type { Config, JoinError, NotificationPermission, Status } from './types'
 
 export function createMockApi(): Api {
   // `?platform=windows` previews the Windows version of the window.
   const platform = new URLSearchParams(window.location.search).get('platform') ?? 'macos'
   const windows = platform === 'windows'
+  // `?notifications=blocked` previews notifications turned off in System Settings.
+  let notifications: NotificationPermission = windows
+    ? 'unknown'
+    : ((new URLSearchParams(window.location.search).get('notifications') as NotificationPermission | null) ??
+      'not_asked')
   let config: Config = {
     version: 1,
     auto_switch: true,
@@ -136,6 +141,12 @@ export function createMockApi(): Api {
       await delay(1000)
       status = { ...status, permission: 'granted' }
       emitStatus()
+    },
+    notificationPermission: async () => notifications,
+    askNotificationPermission: async () => {
+      await delay(800)
+      if (notifications === 'not_asked') notifications = 'allowed'
+      return notifications
     },
     openLink: async (link) => {
       console.info('would open', link)

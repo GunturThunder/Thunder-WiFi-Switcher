@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { createMockApi } from './mock'
-import type { AppInfo, Config, JoinError, Link, Nearby, Saved, Status } from './types'
+import type { AppInfo, Config, JoinError, Link, Nearby, NotificationPermission, Saved, Status } from './types'
 
 export interface Api {
   appInfo(): Promise<AppInfo>
@@ -20,6 +20,9 @@ export interface Api {
   setPassword(ssid: string, password: string): Promise<void>
   deletePassword(ssid: string): Promise<void>
   requestPermission(): Promise<void>
+  notificationPermission(): Promise<NotificationPermission>
+  /** Asks the user; the system asks each app only once. */
+  askNotificationPermission(): Promise<NotificationPermission>
   openLink(link: Link): Promise<void>
   getAutostart(): Promise<boolean>
   setAutostart(enabled: boolean): Promise<void>
@@ -43,6 +46,8 @@ const tauriApi: Api = {
   setPassword: (ssid, password) => invoke('set_password', { ssid, password }),
   deletePassword: (ssid) => invoke('delete_password', { ssid }),
   requestPermission: () => invoke('request_permission'),
+  notificationPermission: () => invoke('notification_permission'),
+  askNotificationPermission: () => invoke('ask_notification_permission'),
   openLink: (link) => invoke('open_link', { link }),
   getAutostart: () => invoke('get_autostart'),
   setAutostart: (enabled) => invoke('set_autostart', { enabled }),

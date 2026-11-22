@@ -80,7 +80,10 @@ export interface Saved {
   notes: string[]
 }
 
-export type Link = 'repo' | 'privacy' | 'issues' | 'location_settings'
+export type Link = 'repo' | 'privacy' | 'issues' | 'location_settings' | 'notification_settings'
+
+/** Whether the system shows the app's notifications (commands.rs). Only macOS can tell. */
+export type NotificationPermission = 'allowed' | 'blocked' | 'not_asked' | 'unknown'
 
 /** Why "Join now" failed (status.rs `JoinError`). */
 export type JoinProblem =
