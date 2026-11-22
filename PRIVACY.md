@@ -25,7 +25,7 @@ You can take the permission back at any time. Auto-switching stops working until
 | Settings: your network list and order, thresholds, preferences | macOS: `~/Library/Application Support/ThunderWiFi/config.toml`<br>Windows: `%APPDATA%\ThunderWiFi\config.toml` | Plain text. Contains network names, never passwords. |
 | Wi-Fi passwords (macOS only) | macOS Keychain, under the name `ThunderWiFi` | macOS doesn't let apps use the system's saved Wi-Fi passwords, so you enter each one once. They stay in the Keychain and are only read at the moment of connecting. |
 | Wi-Fi passwords (Windows) | Not stored by the app | The app uses the network profiles Windows has already saved. |
-| Logs | macOS: `~/Library/Logs/ThunderWiFi/`<br>Windows: `%LOCALAPPDATA%\ThunderWiFi\logs\` | Network names, signal strength and ping only. No passwords. No IP addresses except your router's. Rotated at 5 MB. |
+| Logs | macOS: `~/Library/Logs/ThunderWiFi/`<br>Windows: `%LOCALAPPDATA%\ThunderWiFi\logs\` | Network names, signal strength and ping only. No passwords. No IP addresses except your router's and the ping servers' (1.1.1.1 and 8.8.8.8 by default). Rotated at 5 MB. |
 | Signal history (planned) | Next to the settings file | For the 24-hour graph. Kept for 7 days. |
 
 Uninstalling the app and deleting these folders (and the `ThunderWiFi` Keychain items on macOS) removes everything it stored.
