@@ -57,6 +57,17 @@ pub enum Error {
     /// Wrong password, or the network rejected the connection.
     #[error("the network rejected the connection (wrong password?)")]
     AuthFailed,
+    /// The network needs a password and none is saved (macOS: in the
+    /// Keychain; Windows: in a Wi-Fi profile).
+    #[error("no password is saved for it")]
+    NoPassword,
+    /// The network needs a user name as well as a password (WPA Enterprise,
+    /// common on campus networks). The app can't join these yet.
+    #[error("it needs a user name as well as a password, which the app can't do yet")]
+    NeedsUserName,
+    /// Wi-Fi is turned off.
+    #[error("Wi-Fi is turned off")]
+    WifiOff,
     /// The OS didn't answer in time.
     #[error("Wi-Fi didn't respond in time")]
     Timeout,

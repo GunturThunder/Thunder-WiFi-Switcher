@@ -409,6 +409,13 @@ impl Engine {
         if from.as_deref() == Some(ssid.as_str()) {
             return Action::None;
         }
+        if matches!(self.last_sample, Some(Sample::WifiOff)) {
+            // Nothing to try. Not the network's fault, so it isn't skipped.
+            return Action::Notify(Notice::ConnectFailed {
+                ssid,
+                error: Error::WifiOff,
+            });
+        }
         // Takes over from whatever was happening; late scan or connect
         // results for that are ignored.
         self.state = State::Switching {
@@ -828,6 +835,23 @@ mod tests {
         );
         assert_eq!(engine.state(), &WATCHING);
         assert_eq!(engine.avoided().count(), 1);
+    }
+
+    #[test]
+    fn user_switch_with_wifi_off_fails_without_trying() {
+        let mut engine = Engine::new(config());
+        engine.step(secs(0), Event::Sample(Sample::WifiOff));
+        let before = engine.state().clone();
+        assert_eq!(
+            engine.step(secs(1), Event::UserSwitch { ssid: "B".into() }),
+            Action::Notify(Notice::ConnectFailed {
+                ssid: "B".into(),
+                error: Error::WifiOff,
+            })
+        );
+        assert_eq!(engine.state(), &before);
+        // Not B's fault: it isn't skipped once Wi-Fi is back on.
+        assert_eq!(engine.avoided().count(), 0);
     }
 
     #[test]
