@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Setup guide on first run (Networks tab, and About → **Setup guide** any time): each step says what the app asks for, why, and what macOS or Windows will show: Location, your networks and their passwords (Keychain), notifications, and open at login. Each step shows whether it's done. After you allow Location, the Nearby list fills in by itself.
 - Switch notifications (General → **Notify me when it switches**, off by default): when the app switches networks by itself, a notification says where it went and why, for example "Switched to Dorm-2.4 · Dorm-5G's signal was weak (-81 dBm)". Switches you make yourself don't notify. Turning it on sends a test notification. On macOS the app asks for permission when you turn it on, and if macOS is blocking its notifications, the settings window says so, with **Open notification settings** to fix it.
 - **Join now** in the settings window now says why joining failed, right under the network, and offers the fix: not in range, no password saved, wrong password, Location permission needed, Wi-Fi turned off, no answer in time, or a network that needs a user name (WPA Enterprise, which the app can't join yet). No pop-ups: the message hides itself after 5 seconds.
 - Release workflow: pushing a version tag builds the macOS `.dmg` (Apple Silicon and Intel) and Windows `.msi` (x64 and ARM64) and attaches them to a draft GitHub Release.

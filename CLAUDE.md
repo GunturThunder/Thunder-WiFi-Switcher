@@ -38,7 +38,7 @@ Settings window (from `app/`):
 npm ci
 npm run check            # svelte-check + tsc
 npm run build            # Vite → app/dist
-npm run dev              # browser only, with the pretend backend; add ?platform=windows for the Windows UI
+npm run dev              # browser only, with the pretend backend; add ?platform=windows, ?firstrun or ?notifications=blocked
 ```
 
 Running the app:
@@ -104,7 +104,8 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
 ### Settings window (`app/ui/src`)
 
 - `lib/api.ts` uses Tauri's `invoke` inside the app and `lib/mock.ts` in a plain browser.
-- `lib/store.svelte.ts` holds the state (Svelte 5 runes). Every change saves immediately; there's no Save button.
+- `lib/store.svelte.ts` holds the state (Svelte 5 runes), including the current tab and the notification and open-at-login state. Every change saves immediately; there's no Save button.
+- `lib/SetupGuide.svelte` is the setup guide (Location, networks, notifications, open at login). It opens while `app.setupNeeded` and from About → Setup guide. Keep its quotes of system prompts in step with what macOS and Windows really show.
 - Types in `lib/types.ts` mirror the Rust serde output and stay snake_case.
 
 ## Platform gotchas (all learned the hard way)
