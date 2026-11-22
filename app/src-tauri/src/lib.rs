@@ -23,10 +23,11 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+use tauri_plugin_notification::NotificationExt as _;
 use thunder_core::{Config, Engine, Origin, WifiBackend};
 
 use crate::backend::Passwords;
-use crate::status::Status;
+use crate::status::{Alert, Status};
 use crate::tray::{MENU_AUTO_SWITCH, MENU_QUIT, MENU_SETTINGS, MENU_SWITCH_PREFIX, Tray};
 use crate::worker::{Command, Worker};
 
@@ -64,11 +65,28 @@ pub fn apply_config(app: &AppHandle, mut config: Config) -> Result<(Config, Vec<
     config
         .save(&state.config_path)
         .map_err(|err| format!("Couldn't save settings: {err}"))?;
-    *state.config() = config.clone();
+    let was_notifying = std::mem::replace(&mut *state.config(), config.clone()).notify_on_switch;
+    if config.notify_on_switch && !was_notifying {
+        notify(app, &Alert::turned_on());
+    }
     state.worker.send(Command::SetConfig(config.clone()));
     state.refresh_tray(app, &state.worker.status());
     let _ = app.emit("config", &config);
     Ok((config, notes))
+}
+
+/// Shows a desktop notification. If the system blocks them (the user turned
+/// them off for the app), nothing appears; that's their choice.
+fn notify(app: &AppHandle, alert: &Alert) {
+    let shown = app
+        .notification()
+        .builder()
+        .title(&alert.title)
+        .body(&alert.body)
+        .show();
+    if let Err(err) = shown {
+        log::warn!("couldn't show a notification: {err}");
+    }
 }
 
 /// Starts the app. Called from `main.rs`.
@@ -103,6 +121,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -116,6 +135,8 @@ pub fn run() {
             commands::set_password,
             commands::delete_password,
             commands::request_permission,
+            commands::notification_permission,
+            commands::ask_notification_permission,
             commands::open_link,
             commands::get_autostart,
             commands::set_autostart,
@@ -162,6 +183,7 @@ pub fn run() {
             let tray = Tray::build(&handle, &config, &first_status, on_menu)?;
 
             let status_handle = handle.clone();
+            let alert_handle = handle.clone();
             let worker = Worker::spawn(
                 config.clone(),
                 Arc::clone(&backend),
@@ -172,6 +194,7 @@ pub fn run() {
                     }
                     let _ = status_handle.emit("status", status);
                 },
+                move |alert| notify(&alert_handle, alert),
             );
 
             let show_settings =

@@ -145,6 +145,57 @@ pub fn request_permission(state: State<'_, AppState>) {
     state.backend.request_permission();
 }
 
+/// Whether the system shows the app's notifications. Only macOS can tell;
+/// elsewhere it's always `Unknown`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub enum NotificationPermission {
+    Allowed,
+    Blocked,
+    NotAsked,
+    Unknown,
+}
+
+#[tauri::command]
+pub async fn notification_permission() -> NotificationPermission {
+    notification_call(false).await
+}
+
+/// Asks the user (macOS asks each app only once) and returns the answer.
+#[tauri::command]
+pub async fn ask_notification_permission() -> NotificationPermission {
+    notification_call(true).await
+}
+
+#[cfg(target_os = "macos")]
+async fn notification_call(ask: bool) -> NotificationPermission {
+    use wifi_macos::NotificationPermission as Mac;
+    let answer = tauri::async_runtime::spawn_blocking(move || {
+        if ask {
+            wifi_macos::ask_notification_permission()
+        } else {
+            wifi_macos::notification_permission()
+        }
+    })
+    .await;
+    let permission = match answer {
+        Ok(Mac::Allowed) => NotificationPermission::Allowed,
+        Ok(Mac::Blocked) => NotificationPermission::Blocked,
+        Ok(Mac::NotAsked) => NotificationPermission::NotAsked,
+        Ok(Mac::Unknown) | Err(_) => NotificationPermission::Unknown,
+    };
+    if ask {
+        log::info!("asked to allow notifications: {permission:?}");
+    }
+    permission
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn notification_call(_ask: bool) -> NotificationPermission {
+    NotificationPermission::Unknown
+}
+
 /// Links the window may open. Fixed here, so the window can't open anything else.
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -153,6 +204,7 @@ pub enum Link {
     Privacy,
     Issues,
     LocationSettings,
+    NotificationSettings,
 }
 
 #[tauri::command]
@@ -167,6 +219,12 @@ pub fn open_link(app: AppHandle, link: Link) -> CommandResult<()> {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices"
                 .to_owned()
         }
+        Link::NotificationSettings if cfg!(windows) => "ms-settings:notifications".to_owned(),
+        // Opens this app's own page in Notifications.
+        Link::NotificationSettings => format!(
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={}",
+            app.config().identifier
+        ),
     };
     app.opener().open_url(url, None::<&str>).map_err(text)
 }

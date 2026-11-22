@@ -58,7 +58,7 @@ cargo run -p wifi-windows --example probe -- status|permission|scan|known|connec
 
 ```
 crates/thunder-core   all decisions; no OS code; builds and tests on Linux
-crates/wifi-macos     CoreWLAN, Keychain, CoreLocation, SystemConfiguration, NSWorkspace, ICMP socket
+crates/wifi-macos     CoreWLAN, Keychain, CoreLocation, SystemConfiguration, NSWorkspace, UserNotifications, ICMP socket
 crates/wifi-windows   wlanapi, IP Helper, power notifications, IcmpSendEcho
 app/src-tauri         Tauri shell: worker thread, tray, commands, plugins
 app/ui                settings window (Vite root is app/ui; package.json and vite.config.ts are in app/)
@@ -75,7 +75,7 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
    3. `quality::verdict` turns the results into an `Internet` value, carried in `Sample::Connected(link, internet)`.
    4. `Engine::step(now, Event::Sample)` decides what to do.
 3. The engine returns an `Action` (`Scan`, `Connect`, `Notify`). The driver carries it out against the backend and feeds `ScanDone` / `ConnectDone` back until the action is `None` or `Notify`.
-4. The worker builds a `Status` (`status.rs`). When it changes, the shell redraws the tray (`tray.rs`) and emits a `status` event to the window. Menu commands (`Command::SwitchTo`, `SetConfig`, `Sleep`, `Wake`, `Scan`) reach the worker over a channel.
+4. The worker builds a `Status` (`status.rs`). When it changes, the shell redraws the tray (`tray.rs`) and emits a `status` event to the window. If notifications are on, each automatic switch also becomes an `Alert` (`status.rs`), shown with the notification plugin; switches the user made don't. Menu commands (`Command::SwitchTo`, `SetConfig`, `Sleep`, `Wake`, `Scan`) reach the worker over a channel.
 
 ### Core modules (`thunder-core`)
 
@@ -97,7 +97,7 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
 
 - **`lib.rs`:**
   - setup: load the config, pick the backend (`backend.rs`: real, simulated, or `Unsupported` on Linux), build the tray, spawn the worker, `app.manage(AppState)`, start the sleep watcher
-  - `apply_config()`: every settings change goes through it (normalize, save, send to the worker, redraw the tray, emit `config`)
+  - `apply_config()`: every settings change goes through it (normalize, save, send to the worker, redraw the tray, emit `config`). Turning notifications on sends a test one.
 - **`commands.rs`:** the only API the window can call. Passwords only travel into the Keychain, never back out. `open_link` only opens a fixed list of URLs. `switch_to` ("Join now") waits for the worker's result and turns a failure into a `JoinError` (`status.rs`: a `kind` for the fix button plus a plain message).
 - **`simulate.rs`:** a 6-minute loop. Walking away gives a weak-signal switch; Dorm-2.4's internet outage gives a bad-internet switch.
 
@@ -115,6 +115,7 @@ macOS:
 - **Permission status arrives late.** It's only known after a `CLLocationManager` has run on the main thread; `MacBackend::new()` starts one. Decide `PermissionDenied` from CoreWLAN returning nil names, not from the status.
 - **Rebuilds reset trust.** Ad-hoc-signed builds lose Location permission and Keychain trust after every rebuild. That's expected until Developer ID signing (Phase 5).
 - **"Resource busy" (EBUSY).** CoreWLAN returns it while macOS is busy itself, so calls retry twice (`retry_if_busy`).
+- **Notifications need the user's OK.** The first notification makes macOS ask "would like to send notifications". If the user picks Don't Allow (or closes the box), later notifications go silently to Notification Center with no banner. macOS asks each app only once; after a no, only System Settings can change it. The plugin can't read the choice (it always says granted on desktop), so `wifi-macos/src/notifications.rs` reads and asks with `UNUserNotificationCenter`, and the General tab shows a warning with a link to the app's notification settings. That framework stops the process outside a real `.app` (`tauri dev`, tests), so it's only called when the main bundle path ends in `.app`. `usernoted` logs each answer: `Authorization set for io.github.gunturthunder.thunderwifi to allow: NO`.
 - **Password prompts need a terminal.** An app launched with `open` has no controlling terminal, so `probe-macos.sh` runs `save`, `forget` and `known` directly.
 
 Windows:

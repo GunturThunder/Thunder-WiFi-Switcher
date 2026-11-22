@@ -331,6 +331,71 @@ pub fn notice_text(notice: &Notice) -> String {
     }
 }
 
+/// A desktop notification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Alert {
+    /// The first line, in bold.
+    pub title: String,
+    /// The line below it.
+    pub body: String,
+}
+
+impl Alert {
+    /// The notification for an automatic switch (when the user turned them
+    /// on). `None` for switches the user made themselves, which they already
+    /// know about, and for failed joins, which the menu shows.
+    pub fn for_notice(notice: &Notice) -> Option<Self> {
+        let Notice::Switched { from, to, reason } = notice else {
+            return None;
+        };
+        let (title, body) = match (reason, from) {
+            (Reason::User, _) => return None,
+            (Reason::Disconnected, _) => (
+                format!("Reconnected to {to}"),
+                "The Wi-Fi connection had dropped.".to_owned(),
+            ),
+            (Reason::WeakSignal { rssi }, Some(from)) => (
+                format!("Switched to {to}"),
+                format!("{from}'s signal was weak ({rssi} dBm)."),
+            ),
+            (Reason::WeakSignal { .. }, None) => (
+                format!("Switched to {to}"),
+                "The signal was weak.".to_owned(),
+            ),
+            (Reason::BadInternet { ping_ms, loss_pct }, Some(from)) => (
+                format!("Switched to {to}"),
+                capitalize(&format!("{}.", internet_reason(from, *ping_ms, *loss_pct))),
+            ),
+            (Reason::BadLink { .. }, Some(from)) => (
+                format!("Switched to {to}"),
+                format!("{from}'s router stopped responding."),
+            ),
+            (Reason::BadInternet { .. } | Reason::BadLink { .. }, None) => (
+                format!("Switched to {to}"),
+                "The internet was bad.".to_owned(),
+            ),
+        };
+        Some(Self { title, body })
+    }
+
+    /// Sent once when the user turns notifications on, so they see what one
+    /// looks like (and that the system lets them through).
+    pub fn turned_on() -> Self {
+        Self {
+            title: "Notifications are on".to_owned(),
+            body: "You'll see one like this when the app switches networks by itself.".to_owned(),
+        }
+    }
+}
+
+/// Upper-cases the first letter ("no internet on A." → "No internet on A.").
+fn capitalize(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 /// Why joining a network from the settings window failed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JoinError {
@@ -637,6 +702,63 @@ mod tests {
                 error: Error::AuthFailed
             }),
             "Couldn't join B: the network rejected the connection (wrong password?)"
+        );
+    }
+
+    #[test]
+    fn notifications_only_for_automatic_switches() {
+        let switched = |from: Option<&str>, reason| Notice::Switched {
+            from: from.map(Into::into),
+            to: "B".into(),
+            reason,
+        };
+        let alert = |notice| Alert::for_notice(&notice).map(|a| (a.title, a.body));
+
+        assert_eq!(
+            alert(switched(Some("A"), Reason::WeakSignal { rssi: -81 })),
+            Some((
+                "Switched to B".into(),
+                "A's signal was weak (-81 dBm).".into()
+            ))
+        );
+        assert_eq!(
+            alert(switched(None, Reason::Disconnected)),
+            Some((
+                "Reconnected to B".into(),
+                "The Wi-Fi connection had dropped.".into()
+            ))
+        );
+        assert_eq!(
+            alert(switched(
+                Some("A"),
+                Reason::BadInternet {
+                    ping_ms: None,
+                    loss_pct: 100
+                }
+            )),
+            Some(("Switched to B".into(), "No internet on A.".into()))
+        );
+        assert_eq!(
+            alert(switched(
+                Some("A"),
+                Reason::BadLink {
+                    ping_ms: None,
+                    loss_pct: 100
+                }
+            )),
+            Some((
+                "Switched to B".into(),
+                "A's router stopped responding.".into()
+            ))
+        );
+        // The user did it themselves, or nothing changed.
+        assert_eq!(alert(switched(Some("A"), Reason::User)), None);
+        assert_eq!(
+            alert(Notice::ConnectFailed {
+                ssid: "B".into(),
+                error: Error::AuthFailed
+            }),
+            None
         );
     }
 

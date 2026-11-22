@@ -39,6 +39,7 @@ Copy the checklist into the release's pull request or issue and tick it off. Not
 - [ ] Sleep the laptop for a few minutes and wake it. The app doesn't fight the system's own reconnect, and the menu shows the right network within about 15 seconds.
 - [ ] Turn Wi-Fi off: the menu says "Wi-Fi is off" and the icon is crossed out. Turn it back on: it reconnects.
 - [ ] **Open at login** (General tab): turn it on, restart the computer, and the app starts by itself. Turn it off again.
+- [ ] **Notify me when it switches** (General tab): turning it on shows a test notification (macOS first asks to allow notifications: choose **Allow**). **macOS:** turn notifications off for the app in System Settings → Notifications; the General tab shows a red warning, **Open notification settings** opens the app's page, and the warning goes once they're allowed again. During the weak-signal test above, a notification says where it switched and why; **Switch to** in the menu doesn't notify.
 
 ## Resource use (PRD targets)
 
