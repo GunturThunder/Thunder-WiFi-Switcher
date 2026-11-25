@@ -117,6 +117,8 @@ pub struct Status {
     pub connection: Connection,
     /// Current network, when connected.
     pub ssid: Option<String>,
+    /// The place of the current network ("Dorm"), if the user gave it one.
+    pub place: Option<String>,
     /// Current signal (dBm), when connected.
     pub rssi: Option<i32>,
     /// Best median ping to the public servers, when connected and checked.
@@ -152,6 +154,7 @@ impl Status {
         let mut status = Self {
             connection: Connection::Starting,
             ssid: None,
+            place: None,
             rssi: None,
             ping_ms: None,
             loss_pct: None,
@@ -170,6 +173,7 @@ impl Status {
             Some(Ok(Sample::Connected(link, internet))) => {
                 status.connection = Connection::Connected;
                 status.managed = engine.config().is_enabled(&link.ssid);
+                status.place = engine.config().place_of(&link.ssid).map(str::to_owned);
                 status.ssid = Some(link.ssid.clone());
                 status.rssi = Some(link.rssi);
                 status.internet = (*internet).into();
@@ -503,7 +507,7 @@ mod tests {
 
     fn engine() -> Engine {
         Engine::new(Config {
-            networks: vec![Network::new("Dorm-5G")],
+            networks: vec![Network::new("Dorm-5G").in_place("Dorm")],
             ..Config::default()
         })
     }
@@ -599,6 +603,7 @@ mod tests {
         assert_eq!(status.label().as_deref(), Some("-58"));
         assert_eq!(status.bars(), Some(3));
         assert!(status.managed);
+        assert_eq!(status.place.as_deref(), Some("Dorm"));
         assert_eq!(status.activity, Activity::Watching);
     }
 
@@ -606,6 +611,7 @@ mod tests {
     fn connected_to_someone_elses_network() {
         let status = status(Ok(link("Cafe", -70)));
         assert!(!status.managed);
+        assert_eq!(status.place, None);
         assert_eq!(status.bars(), Some(2));
     }
 

@@ -7,7 +7,7 @@
 //! 15:42 – Switched from Dorm-2.4 …    (last event, not clickable)
 //! ─────────
 //! ✓ Auto-switch
-//! Switch to ▸  Dorm-5G ✓ / Dorm-2.4 / …
+//! Switch to · Dorm ▸  Dorm-5G ✓ / Dorm-2.4 / …   (only the place you're in)
 //! ─────────
 //! Settings…
 //! ─────────
@@ -58,6 +58,7 @@ struct Shown {
     summary: String,
     event: String,
     switch_targets: Option<(Vec<String>, Option<String>)>,
+    switch_label: String,
 }
 
 impl Tray {
@@ -172,9 +173,17 @@ impl Tray {
         }
 
         let targets: Vec<String> = config
-            .enabled_networks()
+            .networks_here(status.ssid.as_deref())
             .map(|network| network.ssid.clone())
             .collect();
+        let switch_label = match &status.place {
+            Some(place) => format!("Switch to · {place}"),
+            None => "Switch to".to_owned(),
+        };
+        if shown.switch_label != switch_label {
+            self.switch_to.set_text(&switch_label)?;
+            shown.switch_label = switch_label;
+        }
         let switch_targets = Some((targets, status.ssid.clone()));
         if shown.switch_targets != switch_targets {
             let (targets, current) = switch_targets.clone().unwrap_or_default();
