@@ -4,7 +4,7 @@
   import { api } from '../lib/api'
   import SetupGuide from '../lib/SetupGuide.svelte'
   import { app } from '../lib/store.svelte'
-  import type { JoinError, Nearby } from '../lib/types'
+  import type { JoinError, Nearby, Network } from '../lib/types'
 
   let networks = $derived(app.config?.networks ?? [])
   let current = $derived(app.status?.connection === 'connected' ? app.status.ssid : null)
@@ -29,6 +29,34 @@
   const joinErrorTimers = new Map<string, ReturnType<typeof setTimeout>>()
   let dragFrom = $state<number | null>(null)
   let dropAt = $state<number | null>(null)
+  // Places: the network whose place is being changed, the place being
+  // renamed, and the text typed for either.
+  let placing = $state<string | null>(null)
+  let renaming = $state<string | null>(null)
+  let placeText = $state('')
+  // New networks go into this place; it starts as the place you're in.
+  let newPlace = $state('')
+  let newPlaceTouched = false
+
+  type Row = { network: Network; index: number }
+  type Group = { place: string | null; rows: Row[] }
+
+  let places = $derived([...new Set(networks.map((n) => n.place).filter((p): p is string => !!p))])
+  let herePlace = $derived(app.status?.connection === 'connected' ? app.status.place : null)
+  // The list split by place, in list order; networks with no place come last.
+  let groups = $derived.by<Group[]>(() => {
+    const byPlace = new Map<string | null, Row[]>(places.map((place) => [place, []]))
+    networks.forEach((network, index) => {
+      const key = network.place || null
+      if (!byPlace.has(key)) byPlace.set(key, [])
+      byPlace.get(key)!.push({ network, index })
+    })
+    return [...byPlace].map(([place, rows]) => ({ place, rows }))
+  })
+
+  $effect(() => {
+    if (!newPlaceTouched && herePlace) newPlace = herePlace
+  })
 
   let names = $derived(new Set(networks.map((network) => network.ssid)))
   let nearbyToAdd = $derived((nearby ?? []).filter((network) => !names.has(network.ssid)))
@@ -117,6 +145,51 @@
     })
   }
 
+  // ↑ ↓ move a network past the next one in its own place.
+  function moveInGroup(group: Group, position: number, step: number) {
+    const target = group.rows[position + step]
+    if (target) move(group.rows[position].index, target.index)
+  }
+
+  function setPlace(network: Network, place: string) {
+    const name = place.trim()
+    if (name) network.place = name
+    else delete network.place
+  }
+
+  function openPlace(ssid: string, place: string | undefined) {
+    renaming = null
+    placing = ssid
+    placeText = place ?? ''
+  }
+
+  async function savePlace(event: SubmitEvent) {
+    event.preventDefault()
+    const ssid = placing
+    if (!ssid) return
+    await app.save((config) => {
+      const network = config.networks.find((n) => n.ssid === ssid)
+      if (network) setPlace(network, placeText)
+    })
+    placing = null
+  }
+
+  function openRename(place: string) {
+    placing = null
+    renaming = place
+    placeText = place
+  }
+
+  async function saveRename(event: SubmitEvent) {
+    event.preventDefault()
+    const from = renaming
+    if (!from) return
+    await app.save((config) => {
+      for (const network of config.networks) if (network.place === from) setPlace(network, placeText)
+    })
+    renaming = null
+  }
+
   function toggle(index: number) {
     app.save((config) => {
       config.networks[index].enabled = !config.networks[index].enabled
@@ -139,9 +212,11 @@
       app.flash('info', `${ssid} is already in your list.`)
       return
     }
+    const place = newPlace.trim()
     await app.save((config) => {
-      config.networks.push({ ssid, enabled: true })
+      config.networks.push(place ? { ssid, enabled: true, place } : { ssid, enabled: true })
     })
+    if (place) app.flash('info', `Added ${ssid} to ${place}.`)
     newName = ''
     if (editable) openEditor(ssid)
   }
@@ -186,8 +261,19 @@
     }
   }
 
+  // Dropping on a network in another place also moves it into that place.
   function onDrop(index: number) {
-    if (dragFrom !== null) move(dragFrom, index)
+    const from = dragFrom
+    const place = networks[index]?.place ?? ''
+    if (from !== null && from !== index) {
+      app.save((config) => {
+        const [network] = config.networks.splice(from, 1)
+        setPlace(network, place)
+        config.networks.splice(index, 0, network)
+      })
+    } else if (from !== null && (networks[from].place ?? '') !== place) {
+      app.save((config) => setPlace(config.networks[from], place))
+    }
     dragFrom = null
     dropAt = null
   }
@@ -199,7 +285,10 @@
 
 <section>
   <h2>Your networks</h2>
-  <p class="hint">Higher in the list wins when two networks are about equally strong. Drag to reorder.</p>
+  <p class="hint">
+    Higher in the list wins when two networks are about equally strong. Drag to reorder. Give networks a place
+    (Dorm, Office) to keep the list and the menu tidy: the menu shows the place you're in.
+  </p>
   {#if app.info && !editable}
     <p class="hint">
       Windows uses the passwords it has already saved: connect to each network once from the Windows Wi-Fi menu
@@ -210,109 +299,159 @@
   {#if networks.length === 0}
     <p class="empty">No networks yet.</p>
   {:else}
-    <ul class="networks">
-      {#each networks as network, index (network.ssid)}
-        <li
-          draggable="true"
-          class:dragging={dragFrom === index}
-          class:drop={dropAt === index && dragFrom !== index}
-          ondragstart={() => (dragFrom = index)}
-          ondragover={(event) => {
-            event.preventDefault()
-            dropAt = index
-          }}
-          ondragleave={() => (dropAt = null)}
-          ondrop={() => onDrop(index)}
-          ondragend={() => {
-            dragFrom = null
-            dropAt = null
-          }}
-        >
-          <div class="row">
-            <span class="handle" aria-hidden="true">⋮⋮</span>
-            <input
-              type="checkbox"
-              checked={network.enabled}
-              onchange={() => toggle(index)}
-              aria-label="Switch to {network.ssid} automatically"
-              title="Switch to this network automatically"
-            />
-            <div class="name">
-              <span class="ssid" class:off={!network.enabled}>{network.ssid}</span>
-              <span class="meta">
-                {#if current === network.ssid}
-                  <span class="badge">Connected</span>
-                {:else if joining === network.ssid}
-                  <span class="joining">Joining…</span>
-                {:else if network.enabled}
-                  <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
-                    Join now
-                  </button>
-                {/if}
-                {#if editable}
+    <datalist id="place-suggestions">
+      {#each places as place (place)}
+        <option value={place}></option>
+      {/each}
+    </datalist>
+    {#each groups as group (group.place ?? '')}
+      <div class="group">
+        {#if places.length > 0}
+          {#if renaming !== null && renaming === group.place}
+            <form class="place rename" onsubmit={saveRename}>
+              <input use:focus bind:value={placeText} aria-label="New name for {group.place}" />
+              <button type="submit" class="primary">Rename</button>
+              <button type="button" onclick={() => (renaming = null)}>Cancel</button>
+            </form>
+          {:else}
+            <div class="group-head">
+              <h3>{group.place ?? 'No place'}</h3>
+              {#if group.place && group.place === herePlace}
+                <span class="here">You're here</span>
+              {/if}
+              {#if group.place}
+                <button type="button" class="link" onclick={() => openRename(group.place!)}>Rename</button>
+              {/if}
+            </div>
+          {/if}
+        {/if}
+        <ul class="networks">
+          {#each group.rows as { network, index }, position (network.ssid)}
+          <li
+            draggable="true"
+            class:dragging={dragFrom === index}
+            class:drop={dropAt === index && dragFrom !== index}
+            ondragstart={() => (dragFrom = index)}
+            ondragover={(event) => {
+              event.preventDefault()
+              dropAt = index
+            }}
+            ondragleave={() => (dropAt = null)}
+            ondrop={() => onDrop(index)}
+            ondragend={() => {
+              dragFrom = null
+              dropAt = null
+            }}
+          >
+            <div class="row">
+              <span class="handle" aria-hidden="true">⋮⋮</span>
+              <input
+                type="checkbox"
+                checked={network.enabled}
+                onchange={() => toggle(index)}
+                aria-label="Switch to {network.ssid} automatically"
+                title="Switch to this network automatically"
+              />
+              <div class="name">
+                <span class="ssid" class:off={!network.enabled}>{network.ssid}</span>
+                <span class="meta">
+                  {#if current === network.ssid}
+                    <span class="badge">Connected</span>
+                  {:else if joining === network.ssid}
+                    <span class="joining">Joining…</span>
+                  {:else if network.enabled}
+                    <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
+                      Join now
+                    </button>
+                  {/if}
+                  {#if editable}
+                    <span class="sep">·</span>
+                    {saved[network.ssid] ? 'Password saved' : 'No password'}
+                    <button type="button" class="link" onclick={() => openEditor(network.ssid)}>
+                      {saved[network.ssid] ? 'Change' : 'Add'}
+                    </button>
+                  {/if}
                   <span class="sep">·</span>
-                  {saved[network.ssid] ? 'Password saved' : 'No password'}
-                  <button type="button" class="link" onclick={() => openEditor(network.ssid)}>
-                    {saved[network.ssid] ? 'Change' : 'Add'}
+                  <button type="button" class="link" onclick={() => openPlace(network.ssid, network.place)}>
+                    {network.place ? 'Change place' : 'Set place'}
                   </button>
-                {/if}
-              </span>
-            </div>
-            <div class="actions">
-              <button type="button" class="icon" onclick={() => move(index, index - 1)} disabled={index === 0} aria-label="Move {network.ssid} up">↑</button>
-              <button type="button" class="icon" onclick={() => move(index, index + 1)} disabled={index === networks.length - 1} aria-label="Move {network.ssid} down">↓</button>
-              <button type="button" class="icon danger" onclick={() => remove(network.ssid)} aria-label="Remove {network.ssid}" title="Remove (and its saved password)">✕</button>
-            </div>
-          </div>
-          {#if joinErrors[network.ssid] && current !== network.ssid}
-            {@const problem = joinErrors[network.ssid]}
-            <div
-              class="join-error"
-              role="alert"
-              onmouseenter={() => keepJoinError(network.ssid)}
-              onmouseleave={() => hideJoinErrorLater(network.ssid)}
-              onfocusin={() => keepJoinError(network.ssid)}
-              onfocusout={() => hideJoinErrorLater(network.ssid)}
-            >
-              <p>{problem.message}</p>
-              <div class="fixes">
-                {#if editable && problem.kind === 'no_password' && editing !== network.ssid}
-                  <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Add password</button>
-                {:else if editable && problem.kind === 'wrong_password' && editing !== network.ssid}
-                  <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Change password</button>
-                {:else if problem.kind === 'permission'}
-                  <button type="button" class="link" onclick={allowLocation}>
-                    {isMac ? 'Allow Location' : 'Open Location settings'}
-                  </button>
-                {/if}
-                {#if problem.kind !== 'needs_user_name'}
-                  <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
-                    Try again
-                  </button>
-                {/if}
-                <button type="button" class="link" onclick={() => clearJoinError(network.ssid)}>Dismiss</button>
+                </span>
+              </div>
+              <div class="actions">
+                <button type="button" class="icon" onclick={() => moveInGroup(group, position, -1)} disabled={position === 0} aria-label="Move {network.ssid} up">↑</button>
+                <button type="button" class="icon" onclick={() => moveInGroup(group, position, 1)} disabled={position === group.rows.length - 1} aria-label="Move {network.ssid} down">↓</button>
+                <button type="button" class="icon danger" onclick={() => remove(network.ssid)} aria-label="Remove {network.ssid}" title="Remove (and its saved password)">✕</button>
               </div>
             </div>
-          {/if}
-          {#if editing === network.ssid}
-            <form class="password" onsubmit={savePassword}>
-              <input
-                type="password"
-                use:focus
-                bind:value={password}
-                placeholder="Wi-Fi password for {network.ssid}"
-                autocomplete="off"
-                aria-label="Wi-Fi password for {network.ssid}"
-              />
-              <button type="submit" class="primary" disabled={password === ''}>Save</button>
-              <button type="button" onclick={() => (editing = null)}>Cancel</button>
-              <button type="button" class="link" onclick={() => openNetwork(network.ssid)}>It has no password</button>
-              <p class="hint">Stored in your Keychain. macOS doesn't share the passwords it already knows with apps.</p>
-            </form>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+            {#if joinErrors[network.ssid] && current !== network.ssid}
+              {@const problem = joinErrors[network.ssid]}
+              <div
+                class="join-error"
+                role="alert"
+                onmouseenter={() => keepJoinError(network.ssid)}
+                onmouseleave={() => hideJoinErrorLater(network.ssid)}
+                onfocusin={() => keepJoinError(network.ssid)}
+                onfocusout={() => hideJoinErrorLater(network.ssid)}
+              >
+                <p>{problem.message}</p>
+                <div class="fixes">
+                  {#if editable && problem.kind === 'no_password' && editing !== network.ssid}
+                    <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Add password</button>
+                  {:else if editable && problem.kind === 'wrong_password' && editing !== network.ssid}
+                    <button type="button" class="link" onclick={() => openEditor(network.ssid)}>Change password</button>
+                  {:else if problem.kind === 'permission'}
+                    <button type="button" class="link" onclick={allowLocation}>
+                      {isMac ? 'Allow Location' : 'Open Location settings'}
+                    </button>
+                  {/if}
+                  {#if problem.kind !== 'needs_user_name'}
+                    <button type="button" class="link" onclick={() => join(network.ssid)} disabled={joining !== null}>
+                      Try again
+                    </button>
+                  {/if}
+                  <button type="button" class="link" onclick={() => clearJoinError(network.ssid)}>Dismiss</button>
+                </div>
+              </div>
+            {/if}
+            {#if placing === network.ssid}
+              <form class="place" onsubmit={savePlace}>
+                <input
+                  use:focus
+                  list="place-suggestions"
+                  bind:value={placeText}
+                  placeholder="Place, like Dorm or Office"
+                  aria-label="Place for {network.ssid}"
+                />
+                <button type="submit" class="primary">Save</button>
+                <button type="button" onclick={() => (placing = null)}>Cancel</button>
+                {#if network.place}
+                  <button type="button" class="link" onclick={() => ((placeText = ''), savePlace(new SubmitEvent('submit')))}>
+                    No place
+                  </button>
+                {/if}
+              </form>
+            {/if}
+            {#if editing === network.ssid}
+              <form class="password" onsubmit={savePassword}>
+                <input
+                  type="password"
+                  use:focus
+                  bind:value={password}
+                  placeholder="Wi-Fi password for {network.ssid}"
+                  autocomplete="off"
+                  aria-label="Wi-Fi password for {network.ssid}"
+                />
+                <button type="submit" class="primary" disabled={password === ''}>Save</button>
+                <button type="button" onclick={() => (editing = null)}>Cancel</button>
+                <button type="button" class="link" onclick={() => openNetwork(network.ssid)}>It has no password</button>
+                <p class="hint">Stored in your Keychain. macOS doesn't share the passwords it already knows with apps.</p>
+              </form>
+            {/if}
+          </li>
+          {/each}
+        </ul>
+      </div>
+    {/each}
   {/if}
 </section>
 
@@ -326,6 +465,14 @@
     }}
   >
     <input list="network-suggestions" bind:value={newName} placeholder="Network name" aria-label="Network name" />
+    <input
+      class="new-place"
+      list="place-suggestions"
+      bind:value={newPlace}
+      oninput={() => (newPlaceTouched = true)}
+      placeholder="Place (optional)"
+      aria-label="Place for the new network"
+    />
     <datalist id="network-suggestions">
       {#each suggestions as ssid (ssid)}
         <option value={ssid}></option>
@@ -361,6 +508,50 @@
 <style>
   section + section {
     margin-top: 22px;
+  }
+
+  .group + .group {
+    margin-top: 12px;
+  }
+
+  .group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .group-head h3 {
+    margin: 0;
+  }
+
+  .here {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .place {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 10px 38px;
+  }
+
+  .place input {
+    flex: 1 1 160px;
+  }
+
+  .place.rename {
+    padding: 0 0 6px;
+  }
+
+  .add .new-place {
+    flex: 0 1 140px;
   }
 
   .networks {

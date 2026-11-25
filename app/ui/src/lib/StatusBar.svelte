@@ -51,6 +51,9 @@
     <div class="text">
       <strong>{headline(status)}</strong>
       <span class="detail">
+        {#if status.connection === 'connected' && status.place}
+          {status.place} ·
+        {/if}
         {#if status.connection === 'connected' && status.rssi !== null}
           {status.rssi} dBm ·
           {#if internetProblem(status)}

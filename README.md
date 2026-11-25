@@ -38,7 +38,12 @@ Signal strength alone isn't enough either: a network can show full bars and stil
 - **Reconnect when dropped:** join the strongest saved network when Wi-Fi disconnects.
 - **Menu bar / tray status:** signal (dBm) and ping next to the Wi-Fi icon.
 - **Your networks, your order:** pick which networks to use and drag them into preferred order.
-- **Pause and thresholds:** turn auto-switch off, or set your own weak-signal level.
+- **Places:** group networks by where you use them (Dorm, Office); the menu shows only the place you're in.
+- **Join now, with clear errors:** if joining fails, it says why (not in range, wrong password, …) and offers the fix.
+- **Setup guide:** explains each permission before macOS or Windows asks for it.
+- **Switch notifications** (optional): says where it moved and why.
+- **Automatic updates:** new versions download in the background; you choose when to restart.
+- **Pause and thresholds:** turn auto-switch off, or set your own weak-signal level and ping and packet-loss limits.
 - **Battery friendly:** backs off retries, pauses during sleep, aims for under 1% CPU.
 - **Open at login.**
 
@@ -49,12 +54,15 @@ It checks signal and ping every 5 seconds and only acts when a problem lasts 15 
 | Setting | Default |
 | --- | --- |
 | Weak signal | Below -75 dBm (adjustable, -65 to -80) |
-| Bad internet | Ping over 300 ms or packet loss over 10% to **both** 1.1.1.1 and 8.8.8.8 |
+| Bad internet | Ping over 300 ms, or packet loss over 10% (at least 2 lost checks), to **both** 1.1.1.1 and 8.8.8.8 |
 | Problem must last | 15 seconds (3 checks) |
-| "Clearly better" | At least 8 dBm stronger, or clearly lower ping |
+| Just joined a network | Internet checks wait 10 seconds |
+| "Clearly better" | Weak signal: at least 8 dBm stronger. Bad internet: any other network with a usable signal, and the bad one is skipped for 10 minutes |
 | Nothing better in range | Retry after 30 s, doubling up to 5 minutes |
 
 The router is pinged separately, so it can tell a weak Wi-Fi link from a dead internet connection. If a network blocks ping, it falls back to a normal web connection test (port 443).
+
+It only ever switches to saved networks in range. Places don't change that: walking from the dorm to the office next door still moves you over.
 
 ## How it compares
 

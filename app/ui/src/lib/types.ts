@@ -6,6 +6,8 @@ export type Language = 'en' | 'id'
 export interface Network {
   ssid: string
   enabled: boolean
+  /** Where it's used ("Dorm"); missing = no place. Only groups the list and menu. */
+  place?: string
 }
 
 export interface Config {
@@ -51,6 +53,8 @@ export interface LastEvent {
 export interface Status {
   connection: Connection
   ssid: string | null
+  /** The place of the current network, if it has one. */
+  place: string | null
   rssi: number | null
   ping_ms: number | null
   loss_pct: number | null

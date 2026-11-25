@@ -90,7 +90,7 @@ Each backend crate is `#![cfg(target_os = "macos")]` or `#![cfg(windows)]` at th
   - A failed ping is retried right away over TCP port 443 (a refusal counts as an answer). After 3 such retries the target stays on TCP for that network.
   - The internet is bad only if **every** public target is bad.
   - The router only counts once it has answered on this network.
-- **`config.rs`:** TOML settings. `Config::parse` is forgiving: one bad value falls back to its default with a note. A file that isn't valid TOML is renamed to `config.toml.bak`. Saves are atomic. When adding a setting, update the struct, `Default`, `KNOWN_KEYS`, `parse()`, `normalize()` if it has a range, and the tests.
+- **`config.rs`:** TOML settings. `Config::parse` is forgiving: one bad value falls back to its default with a note. A file that isn't valid TOML is renamed to `config.toml.bak`. Saves are atomic. When adding a setting, update the struct, `Default`, `KNOWN_KEYS`, `parse()`, `normalize()` if it has a range, and the tests. A network may have a `place` ("Dorm"): it groups the list and the "Switch to" menu (`networks_here`) but never limits switching.
 - **`fake.rs`:** `FakeBackend` for tests and `--simulate`. It can script signal, outages (`set_internet`), silent routers, blocked ICMP and connect failures.
 
 ### App shell (`app/src-tauri/src`)

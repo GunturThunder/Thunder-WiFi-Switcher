@@ -29,13 +29,15 @@ export function createMockApi(): Api {
     networks: firstRun
       ? []
       : [
-          { ssid: 'Dorm-5G', enabled: true },
-          { ssid: 'Dorm-2.4', enabled: true },
+          { ssid: 'Dorm-5G', enabled: true, place: 'Dorm' },
+          { ssid: 'Dorm-2.4', enabled: true, place: 'Dorm' },
+          { ssid: 'Office-WiFi', enabled: true, place: 'Office' },
         ],
   }
   let status: Status = {
     connection: firstRun ? 'permission_needed' : 'connected',
     ssid: firstRun ? null : 'Dorm-5G',
+    place: firstRun ? null : 'Dorm',
     rssi: firstRun ? null : -58,
     ping_ms: 24,
     loss_pct: 0,
@@ -65,7 +67,11 @@ export function createMockApi(): Api {
   const configListeners = new Set<(config: Config) => void>()
 
   const clone = <T>(value: T): T => structuredClone(value)
-  const emitStatus = () => statusListeners.forEach((listener) => listener(clone(status)))
+  const emitStatus = () => {
+    const place = config.networks.find((network) => network.ssid === status.ssid)?.place ?? null
+    status = { ...status, place: status.connection === 'connected' ? place : null }
+    statusListeners.forEach((listener) => listener(clone(status)))
+  }
   const setUpdate = (next: UpdateStatus) => {
     update = next
     updateListeners.forEach((listener) => listener(clone(update)))
