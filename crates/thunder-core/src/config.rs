@@ -77,6 +77,11 @@ pub struct Network {
     /// Whether the app may switch to it.
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
+    /// Where the user uses it ("Dorm", "Office"). Groups the list and the
+    /// "Switch to" menu. It never limits switching: the app always picks from
+    /// the networks in range, so walking from one place to another works.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
 }
 
 fn enabled_by_default() -> bool {
@@ -84,12 +89,19 @@ fn enabled_by_default() -> bool {
 }
 
 impl Network {
-    /// An enabled network.
+    /// An enabled network with no place.
     pub fn new(ssid: impl Into<String>) -> Self {
         Self {
             ssid: ssid.into(),
             enabled: true,
+            place: None,
         }
+    }
+
+    /// The same network, in a place.
+    pub fn in_place(mut self, place: impl Into<String>) -> Self {
+        self.place = Some(place.into());
+        self
     }
 }
 
@@ -167,6 +179,27 @@ impl Config {
     /// The user's turned-on networks, in priority order.
     pub fn enabled_networks(&self) -> impl Iterator<Item = &Network> {
         self.networks.iter().filter(|network| network.enabled)
+    }
+
+    /// The place of a saved network, if it has one.
+    pub fn place_of(&self, ssid: &str) -> Option<&str> {
+        self.networks
+            .iter()
+            .find(|network| network.ssid == ssid)?
+            .place
+            .as_deref()
+    }
+
+    /// The enabled networks worth offering in the "Switch to" menu. On a
+    /// network that has a place, that's the place's networks plus the ones
+    /// with no place (the others are out of range anyway); elsewhere, all.
+    pub fn networks_here(&self, current: Option<&str>) -> impl Iterator<Item = &Network> {
+        let here = current.and_then(|ssid| self.place_of(ssid));
+        self.enabled_networks()
+            .filter(move |network| match (here, &network.place) {
+                (Some(here), Some(place)) => place == here,
+                _ => true,
+            })
     }
 
     /// Reads settings from `path`.
@@ -339,6 +372,16 @@ impl Config {
             self.ping_targets = default_ping_targets();
         }
 
+        for network in &mut self.networks {
+            // " Dorm " and "Dorm" are one place; an empty place is no place.
+            network.place = network
+                .place
+                .as_deref()
+                .map(str::trim)
+                .filter(|place| !place.is_empty())
+                .map(str::to_owned);
+        }
+
         let mut seen = Vec::with_capacity(self.networks.len());
         self.networks.retain(|network| {
             if network.ssid.is_empty() {
@@ -469,10 +512,12 @@ ping_targets = ["1.1.1.1", "8.8.8.8"]
 [[networks]]               # order = priority
 ssid = "Dorm-5G"
 enabled = true
+place = "Dorm"             # optional; groups the list and menu
 
 [[networks]]
 ssid = "Dorm-2.4"
 enabled = true
+place = "Dorm"
 "#;
 
     fn parse(text: &str) -> (Config, Vec<String>) {
@@ -506,7 +551,10 @@ enabled = true
         assert!(notes.is_empty(), "{notes:?}");
         assert_eq!(
             config.networks,
-            [Network::new("Dorm-5G"), Network::new("Dorm-2.4")]
+            [
+                Network::new("Dorm-5G").in_place("Dorm"),
+                Network::new("Dorm-2.4").in_place("Dorm")
+            ]
         );
         assert_eq!(
             config,
@@ -534,6 +582,7 @@ enabled = true
                 Network {
                     ssid: "Kos Melati 5G".into(),
                     enabled: false,
+                    place: Some("Kos".into()),
                 },
             ],
             ..Config::default()
@@ -543,6 +592,46 @@ enabled = true
         let (back, notes) = parse(&text);
         assert!(notes.is_empty(), "{notes:?}");
         assert_eq!(back, config);
+    }
+
+    #[test]
+    fn a_place_is_read_from_the_file() {
+        let (config, notes) = parse("[[networks]]\nssid = \"Dorm-5G\"\nplace = \"Dorm\"\n");
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!(config.networks, [Network::new("Dorm-5G").in_place("Dorm")]);
+        // No place: nothing written, so older versions read the file as before.
+        assert!(!Config::default().to_toml().contains("place"));
+    }
+
+    #[test]
+    fn places_are_tidied_and_the_menu_shows_the_place_you_are_in() {
+        let mut config = Config {
+            networks: vec![
+                Network::new("Dorm-5G").in_place(" Dorm "),
+                Network::new("Dorm-2.4").in_place("Dorm"),
+                Network::new("Office").in_place("Office"),
+                Network::new("Phone").in_place("   "),
+            ],
+            ..Config::default()
+        };
+        config.normalize();
+        assert_eq!(config.place_of("Dorm-5G"), Some("Dorm"));
+        assert_eq!(config.place_of("Phone"), None);
+        assert_eq!(config.place_of("Café"), None);
+
+        let here = |current: Option<&str>| {
+            config
+                .networks_here(current)
+                .map(|network| network.ssid.clone())
+                .collect::<Vec<_>>()
+        };
+        let all = ["Dorm-5G", "Dorm-2.4", "Office", "Phone"];
+        assert_eq!(here(Some("Dorm-2.4")), ["Dorm-5G", "Dorm-2.4", "Phone"]);
+        assert_eq!(here(Some("Office")), ["Office", "Phone"]);
+        // Not on a network with a place: everything.
+        assert_eq!(here(Some("Phone")), all);
+        assert_eq!(here(Some("Café")), all);
+        assert_eq!(here(None), all);
     }
 
     #[test]
@@ -597,7 +686,8 @@ enabled = false
                 Network::new("Good"),
                 Network {
                     ssid: "Also good".into(),
-                    enabled: false
+                    enabled: false,
+                    place: None,
                 }
             ]
         );

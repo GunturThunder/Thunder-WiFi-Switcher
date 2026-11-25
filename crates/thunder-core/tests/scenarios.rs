@@ -434,6 +434,26 @@ fn a_network_the_user_has_not_added_is_left_alone() {
 }
 
 #[test]
+fn places_never_hold_back_a_switch() {
+    // Walking from the dorm to the office next door: the dorm network fades
+    // while the office one is strong. Places only group the list and menu.
+    let mut sim = Sim::with_config(Config {
+        networks: vec![
+            Network::new("Dorm-A").in_place("Dorm"),
+            Network::new("Office").in_place("Office"),
+        ],
+        ..Config::default()
+    });
+    sim.wifi.set_network("Dorm-A", -50);
+    sim.wifi.set_network("Office", -60);
+    sim.wifi.join("Dorm-A");
+    sim.run(mins(1));
+    sim.wifi.set_network("Dorm-A", -82);
+    sim.run(mins(1));
+    assert_eq!(sim.connected().as_deref(), Some("Office"));
+}
+
+#[test]
 fn a_turned_off_network_is_never_chosen() {
     let mut sim = Sim::with_config(Config {
         networks: vec![
@@ -441,6 +461,7 @@ fn a_turned_off_network_is_never_chosen() {
             Network {
                 ssid: "Dorm-B".into(),
                 enabled: false,
+                place: None,
             },
         ],
         ..Config::default()
