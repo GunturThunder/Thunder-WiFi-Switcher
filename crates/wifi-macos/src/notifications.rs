@@ -1,26 +1,35 @@
-//! Notification permission: whether macOS shows the app's notifications, and
+//! Notifications on macOS: showing them, whether macOS lets them through, and
 //! asking the user.
 //!
-//! The app shows its notifications through Tauri's notification plugin, which
-//! can't tell whether the user allowed them. macOS asks each app only once;
-//! after "Don't Allow", only System Settings can change it. Reading the answer
-//! lets the settings window say so plainly.
+//! Everything here uses Apple's current notification framework
+//! (`UNUserNotificationCenter`). macOS refuses an app that mixes it with the
+//! old one (`NSUserNotificationCenter`, which Tauri's notification plugin
+//! uses): "You can't mix modern clients with legacy clients". So on macOS the
+//! app shows notifications here, not through the plugin.
+//!
+//! macOS asks each app only once whether it may show notifications; after
+//! "Don't Allow", only System Settings can change it. Reading the answer lets
+//! the settings window say so plainly.
 //!
 //! Apple's framework only works inside a real `.app`: anywhere else (`tauri
 //! dev`, tests) it stops the whole process. So outside an app bundle every
 //! answer is [`NotificationPermission::Unknown`].
 
 use std::ptr::NonNull;
+use std::sync::Once;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use block2::RcBlock;
+use block2::{DynBlock, RcBlock};
 use objc2::rc::Retained;
-use objc2::runtime::Bool;
-use objc2_foundation::{NSBundle, NSError};
+use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
+use objc2::{AllocAnyThread, define_class, msg_send};
+use objc2_foundation::{NSBundle, NSError, NSString};
 use objc2_user_notifications::{
-    UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNNotificationSettings,
-    UNUserNotificationCenter,
+    UNAlertStyle, UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent,
+    UNNotification, UNNotificationPresentationOptions, UNNotificationRequest,
+    UNNotificationSettings, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 
 /// Whether macOS shows the app's notifications.
@@ -78,6 +87,76 @@ pub fn ask_notification_permission() -> NotificationPermission {
     }
 }
 
+/// Shows a notification. `on_error` gets macOS's reason if it refuses it.
+/// Returns `false` without doing anything when not running inside an app
+/// bundle (`tauri dev`), where Apple's framework can't be used.
+pub fn show_notification(title: &str, body: &str, on_error: impl Fn(String) + 'static) -> bool {
+    let Some(center) = center() else {
+        return false;
+    };
+    show_while_in_front(&center);
+
+    let content = UNMutableNotificationContent::new();
+    content.setTitle(&NSString::from_str(title));
+    content.setBody(&NSString::from_str(body));
+    // Each notification needs its own id, or it replaces the previous one.
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    let id = format!("thunderwifi-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
+        &NSString::from_str(&id),
+        &content,
+        None,
+    );
+    let done = RcBlock::new(move |error: *mut NSError| {
+        // SAFETY: macOS passes either null or a valid error for the call.
+        if let Some(error) = unsafe { error.as_ref() } {
+            on_error(error.localizedDescription().to_string());
+        }
+    });
+    center.addNotificationRequest_withCompletionHandler(&request, Some(&done));
+    true
+}
+
+define_class!(
+    /// Tells macOS to show the app's notifications as banners even while the
+    /// app is in front (its settings window is open); by default macOS hides
+    /// them then.
+    // SAFETY: NSObject has no subclassing requirements, and this class has no
+    // fields and doesn't implement `Drop`.
+    #[unsafe(super(NSObject))]
+    #[name = "ThunderWiFiNotificationPresenter"]
+    struct Presenter;
+
+    unsafe impl NSObjectProtocol for Presenter {}
+
+    unsafe impl UNUserNotificationCenterDelegate for Presenter {
+        #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
+        fn will_present(
+            &self,
+            _center: &UNUserNotificationCenter,
+            _notification: &UNNotification,
+            completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
+        ) {
+            completion_handler
+                .call((UNNotificationPresentationOptions::Banner
+                    | UNNotificationPresentationOptions::List,));
+        }
+    }
+);
+
+/// Sets the [`Presenter`] as the center's delegate, once. The center keeps
+/// only a weak reference, so the presenter lives as long as the app.
+fn show_while_in_front(center: &UNUserNotificationCenter) {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let this = Presenter::alloc().set_ivars(());
+        // SAFETY: NSObject's plain `init`; the subclass has no fields to set up.
+        let presenter: Retained<Presenter> = unsafe { msg_send![super(this), init] };
+        center.setDelegate(Some(ProtocolObject::from_ref(&*presenter)));
+        std::mem::forget(presenter);
+    });
+}
+
 /// The notification center, or `None` when not running inside an app bundle.
 fn center() -> Option<Retained<UNUserNotificationCenter>> {
     let in_app = NSBundle::mainBundle()
@@ -117,13 +196,14 @@ mod tests {
     }
 
     #[test]
-    fn outside_an_app_bundle_the_answer_is_unknown() {
-        // A test binary isn't an app: asking Apple's framework here would
-        // stop the process, so nothing is asked.
+    fn outside_an_app_bundle_nothing_is_asked_or_shown() {
+        // A test binary isn't an app: using Apple's framework here would
+        // stop the process, so nothing is asked or shown.
         assert_eq!(notification_permission(), NotificationPermission::Unknown);
         assert_eq!(
             ask_notification_permission(),
             NotificationPermission::Unknown
         );
+        assert!(!show_notification("Title", "Body", |_| {}));
     }
 }
