@@ -27,6 +27,6 @@ mod power;
 pub use backend::MacBackend;
 pub use keychain::PasswordStore;
 pub use notifications::{
-    NotificationPermission, ask_notification_permission, notification_permission,
+    NotificationPermission, ask_notification_permission, notification_permission, show_notification,
 };
 pub use power::{PowerEvent, SleepWatcher};
