@@ -25,13 +25,17 @@ serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-log = "2"
-tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wifi-macos = { path = "../../crates/wifi-macos" }
+
+# macOS shows notifications through wifi-macos instead (Apple's current
+# framework; the plugin uses the old one, and macOS won't take both).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-notification = "2"
 
 [target.'cfg(windows)'.dependencies]
 wifi-windows = { path = "../../crates/wifi-windows" }

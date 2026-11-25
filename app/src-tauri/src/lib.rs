@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+#[cfg(not(target_os = "macos"))]
 use tauri_plugin_notification::NotificationExt as _;
 use thunder_core::{Config, Engine, Origin, WifiBackend};
 
@@ -83,6 +84,23 @@ pub fn apply_config(app: &AppHandle, mut config: Config) -> Result<(Config, Vec<
 
 /// Shows a desktop notification. If the system blocks them (the user turned
 /// them off for the app), nothing appears; that's their choice.
+///
+/// macOS: through `wifi-macos`, with Apple's current framework. The plugin
+/// uses the old one, and macOS refuses an app that mixes the two, which it
+/// does as soon as it reads the notification permission.
+#[cfg(target_os = "macos")]
+fn notify(_app: &AppHandle, alert: &Alert) {
+    let sent = wifi_macos::show_notification(&alert.title, &alert.body, |reason| {
+        log::warn!("macOS didn't show a notification: {reason}");
+    });
+    if !sent {
+        log::warn!("notifications only work in the app bundle, not in `tauri dev`");
+    }
+}
+
+/// Shows a desktop notification (Windows: a toast through the plugin). If the
+/// system blocks them, nothing appears; that's the user's choice.
+#[cfg(not(target_os = "macos"))]
 fn notify(app: &AppHandle, alert: &Alert) {
     let shown = app
         .notification()
@@ -117,7 +135,7 @@ pub fn run() {
         log = log.target(Target::new(TargetKind::Stdout));
     }
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // Must come first: a second launch just opens the settings window.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             window::open_settings(app);
@@ -126,8 +144,11 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
-        .plugin(tauri_plugin_notification::init())
+        ));
+    // macOS shows notifications without the plugin (see `notify`).
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+    builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
