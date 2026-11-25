@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Places:** give your networks a place, like Dorm or Office. The Networks tab groups them by place, **Switch to** in the menu shows only the place you're in, and the top of the settings window says which place you're at. New networks go into the place you're in. Places never stop the app from switching: walking from one place to the next still works.
+
 ## [0.5.0] - 2026-11-22
 
 The first public release, a beta for macOS 14 or later and Windows 10 22H2 or Windows 11 (x64 and ARM64).

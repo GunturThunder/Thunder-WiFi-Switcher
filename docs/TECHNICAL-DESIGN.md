@@ -208,11 +208,20 @@ ping_targets = ["1.1.1.1", "8.8.8.8"]
 [[networks]]               # order = priority
 ssid = "Dorm-5G"
 enabled = true
+place = "Dorm"             # optional; groups the list and menu
 
 [[networks]]
 ssid = "Dorm-2.4"
 enabled = true
+place = "Dorm"
 ```
+
+**Places.** A network may have a place ("Dorm", "Office"). The current place is the place of the network the laptop is on; it's worked out from Wi-Fi alone, never from location. Places only change what's shown:
+- the Networks tab groups the list by place (no place last);
+- **Switch to** lists the current place's networks plus the ones with no place, and says the place in its label; off a placed network it lists all of them;
+- the window's status line starts with the place.
+
+Places never limit switching. The engine always picks from the saved networks in range, so walking from the dorm to the office next door still moves to the office network while the dorm one fades.
 
 | OS | Config file | Logs |
 | --- | --- | --- |
@@ -235,7 +244,7 @@ The tray menu is native (Tauri's tray + menu API); only the settings window is a
 1. Status: `Connected: Dorm-5G · -58 dBm` (ping joins it in Phase 4)
 2. Last event: `15:42 – Switched from Dorm-2.4 to Dorm-5G (signal was -81 dBm)`
 3. Auto-switch on/off
-4. Switch to → submenu of the user's enabled networks, the current one checked (works even while auto-switch is off)
+4. Switch to ("Switch to · Dorm" in a place) → submenu of the enabled networks in the current place plus those with no place, or all of them when the current network has no place; the current one checked (works even while auto-switch is off)
 5. Settings…
 6. Quit
 
@@ -258,7 +267,7 @@ Each step shows its state (Needed, Done, Turned off, On, Off, Blocked). The firs
 
 | Tab | Contents |
 | --- | --- |
-| Networks | Saved list with drag-to-reorder, enable toggle, add/remove; on macOS a password field |
+| Networks | Saved list grouped by place, with drag-to-reorder (dropping on another place moves it there), enable toggle, place, add/remove; on macOS a password field |
 | Rules | Weak-signal slider (-65 to -80), bad ping and loss values, ping targets |
 | General | Open at login, notifications, check for updates, language, show signal label |
 | About | Version, check for updates, links to GitHub and privacy note |
