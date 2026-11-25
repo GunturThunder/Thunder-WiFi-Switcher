@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-25
+
 ### Added
 
 - **Places:** give your networks a place, like Dorm or Office. The Networks tab groups them by place, **Switch to** in the menu shows only the place you're in, and the top of the settings window says which place you're at. New networks go into the place you're in. Places never stop the app from switching: walking from one place to the next still works.
@@ -39,5 +41,6 @@ The first public release, a beta for macOS 14 or later and Windows 10 22H2 or Wi
 - **Privacy:** the app stores only its settings file, your Wi-Fi passwords (macOS Keychain) and a log of network names, signal and ping. It sends nothing but the pings and the update check. See [PRIVACY.md](PRIVACY.md).
 - **For contributors:** pretend networks (`--simulate`), probe tools for real Wi-Fi on macOS and Windows, scenario tests, CI on Linux, macOS and Windows, and a release workflow that builds the installers and signs the update files.
 
-[Unreleased]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/tag/v0.5.1
 [0.5.0]: https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases/tag/v0.5.0
