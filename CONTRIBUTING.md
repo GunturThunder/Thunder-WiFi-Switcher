@@ -149,6 +149,7 @@ On Linux, add `--exclude thunder-wifi-switcher` to the `clippy` and `test` comma
 
 3. `release.yml` builds the macOS `.dmg` (universal) and the Windows `.msi` (x64 and ARM64), signs the update files, and attaches everything, including `latest.json`, to a **draft** release. It stops if the tag doesn't match the version.
 4. Run [docs/TESTING.md](docs/TESTING.md) with those installers on a Mac and a Windows laptop, then publish the draft. Don't tick "Set as a pre-release": installed apps only look at the latest release.
+5. Update the Homebrew tap ([GunturThunder/homebrew-tap](https://github.com/GunturThunder/homebrew-tap)): in `Casks/thunder-wifi-switcher.rb`, set `version` and `sha256` (`shasum -a 256` of the new `.dmg`). People who installed with Homebrew still get updates from the app itself; this is for new installs.
 
 The update files are signed with the Tauri updater key, kept in the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Only the maintainer has the private key (with a backup). If it's lost, installed apps can't update any more and need a manual reinstall; if it leaks, make a new key and rotate the secrets and the public key in `app/src-tauri/tauri.conf.json`.
 

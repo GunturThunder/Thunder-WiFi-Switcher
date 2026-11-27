@@ -89,7 +89,15 @@ Both macOS and Windows hide Wi-Fi network names from apps that don't have Locati
 
 Download the latest installer from [Releases](https://github.com/GunturThunder/Thunder-WiFi-Switcher/releases):
 
-- **macOS 14 or later** (Apple Silicon and Intel): the `.dmg`. Open it and drag Thunder WiFi Switcher to Applications.
+- **macOS 14 or later** (Apple Silicon and Intel): the `.dmg`. Open it and drag Thunder WiFi Switcher to Applications. Or use [Homebrew](https://brew.sh):
+
+  ```bash
+  brew trust gunturthunder/tap
+  brew install --cask gunturthunder/tap/thunder-wifi-switcher
+  ```
+
+  (`brew trust` is needed once: Homebrew only loads apps from taps you trust. The official Homebrew list only takes apps signed by Apple.)
+
 - **Windows 10 22H2 or Windows 11:** the `x64` `.msi`, or the `arm64` one on ARM laptops.
 
 The builds aren't signed by Apple or Microsoft, so the first launch needs one extra step (Windows signing is planned):
