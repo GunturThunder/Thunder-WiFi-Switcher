@@ -109,7 +109,7 @@ Done when: pushing a version tag produces signed installers on GitHub Releases t
 Done when: **v1.0** is on GitHub Releases, Homebrew and winget, with docs a stranger can follow.
 
 - [ ] README: screenshots, install steps per OS, FAQ (why Location?) — Claude Code, you
-- [ ] Homebrew tap (our own: the official homebrew-cask doesn't take unsigned apps) and winget manifest, updated by the release workflow — Claude Code
+- [ ] Homebrew tap (our own: the official homebrew-cask doesn't take unsigned apps) and winget manifest, updated by the release workflow — Claude Code. The tap exists: `GunturThunder/homebrew-tap`, updated by hand for now
 - [ ] Label 5–10 "good first issue" tasks for new contributors — you
 - [ ] Launch post (GitHub, Reddit r/macapps and r/windows, campus groups) — you
 - [ ] Fix launch-week bugs; tag v1.0.1 — Claude Code, you

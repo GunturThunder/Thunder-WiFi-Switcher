@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Install with Homebrew on macOS: `brew trust gunturthunder/tap`, then `brew install --cask gunturthunder/tap/thunder-wifi-switcher`.
+
 ## [0.5.1] - 2026-11-25
 
 ### Added
